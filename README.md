@@ -40,4 +40,4 @@
 
 ## Контакты
 
-По всем вопросам пишите в Telegram: https://t.me/py_free_developer
+По всем вопросам пишите в Telegram: https://t.me/sy_mediagarden
