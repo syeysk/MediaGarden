@@ -3,3 +3,4 @@ __pycache__
 *.db
 config.json
 .pytest_cache
+.debug.log

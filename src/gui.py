@@ -8,15 +8,15 @@ gi.require_version("Gdk", "4.0")
 gi.require_version('Gtk', '4.0')
 from gi.repository import GLib, Gio, Gtk, GObject, Gdk
 
-from src.window_builder import WindowBuilder
-from src.scanner import (
-    DBStorage, LibraryStorage, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
+from window_builder import WindowBuilder
+from scanner import (
+    LibraryStorage, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
 )
-from src.exporters import MarkdownExporter
-from src.config import BASE_DIR, config
+from exporters import MarkdownExporter
+from django.conf import settings
 
-XML_DIR = BASE_DIR / 'xml'
+XML_DIR = settings.BASE_REPO_DIR / 'xml'
 MENU_MAIN_PATH = XML_DIR / 'menu_main.xml'
 
 STYLE_CSS = '''
@@ -129,10 +129,10 @@ class BookListView:
         builder.title.set_name('item-file-title')
     
     def open_file(self, _, item: Book):
-        open_file_with_default_program(config.storage_books / item.path / item.title)
+        open_file_with_default_program(item.obj.abspath)
 
     def open_directory(self, _, item: Book):
-        open_file_with_default_program(config.storage_books / item.path)
+        open_file_with_default_program(item.obj.absdirpath)
 
     def open_file_window(self, gesture, count, x, y, item):
         if count == 2:
@@ -203,9 +203,9 @@ class BookListView:
 
         self.book_widgets = {}
 
-    def append(self, book_id, book_path):
-        path = Path(book_path)
-        item = Book(book_id, path.name, path.parent)
+    def append(self, anyfile):
+        item = Book(anyfile.pk, anyfile.filename, anyfile.directory)
+        item.obj = anyfile
         self.list_store.append(item)
     
     def delete_tag(self, _, book, tag_id):
@@ -302,7 +302,8 @@ class TagNameColumnBuilder:
         if keycode == 65293 and not modifier:
             new_name = cell.custom_entry.props.text
             cell.custom_label.props.label = new_name
-            self.lib_storage.db.update_tag(item.tag_id, new_name)
+            item.obj.name = new_name
+            item.obj.save()
 
             cell.custom_label.props.visible = True
             cell.custom_entry.props.visible = False
@@ -391,21 +392,19 @@ class TagCountColumnBuilder:
     def _on_factory_bind(self, factory, list_item):
         cell = list_item.get_child()
         item = list_item.get_item()
-        self.update_count(cell, item.tag_id)
-        self.update_count_funces[item.tag_id] = lambda: self.update_count(cell, item.tag_id)
+        self.update_count_funces[item.tag_id] = lambda: setattr(cell.props, 'label', str(item.obj.files.count()))
+        self.update_count_funces[item.tag_id]()
 
     def _on_factory_unbind(self, factory, list_item):
         cell = list_item.get_child()
 
     def _on_factory_teardown(self, factory, list_item):
-        cell = list_item.get_child()
-
-    def update_count(self, label, tag_id):
-        count_files = self.lib_storage.db.select_count_files_by_tag(tag_id)
-        label.props.label = str(count_files)
+        cell = list_item.get_child()        
 
 
-class TagTreeView:    
+class TagTreeView:
+    new_tag_name = 'новый тег'
+
     def get_children(self, item):
         if isinstance(item, Tag):
             return item.get_children()
@@ -436,7 +435,7 @@ class TagTreeView:
     def update_tag_count(self, tag_id):
         self.update_count_funces[tag_id]()
 
-    def append(self, tag_id, name, checked, parent_id=None):
+    def append(self, tag_obj, checked, parent_id=None):
         if parent_id:
             parent_tag = self.tags[parent_id]
             level = parent_tag.level + 1
@@ -446,10 +445,11 @@ class TagTreeView:
             level = 0
             list_store = self.list_store
 
-        tag = Tag(tag_id, name, checked, parent_id, level)
+        tag = Tag(tag_obj.pk, tag_obj.name, checked, parent_id, level)
+        tag.obj = tag_obj
         list_store.append(tag)
-        self.tags[tag_id] = tag
-        self.tag_binded_values[tag_id] = tag.checked
+        self.tags[tag_obj.pk] = tag
+        self.tag_binded_values[tag_obj.pk] = tag.checked
 
     def action_new_tag(self, _):
         parent_id = None
@@ -457,9 +457,8 @@ class TagTreeView:
         if current_tag and current_tag.parent_id:
             parent_id = current_tag.parent_id
 
-        tag_name = 'новый тег'
-        tag_id = self.lib_storage.db.insert_tag(tag_name, parent_id)
-        self.append(tag_id, tag_name, False, parent_id)
+        tag_obj = self.lib_storage.db.insert_tag(self.new_tag_name, parent_id)
+        self.append(tag_obj, False, parent_id)
 
     def action_new_child_tag(self, _):
         parent_id = None
@@ -467,20 +466,19 @@ class TagTreeView:
         if current_tag:
             parent_id = current_tag.tag_id
 
-        tag_name = 'новый тег'
-        tag_id = self.lib_storage.db.insert_tag(tag_name, parent_id)
-        self.append(tag_id, tag_name, False, parent_id)
+        tag_obj = self.lib_storage.db.insert_tag(self.new_tag_name, parent_id)
+        self.append(tag_obj, False, parent_id)
 
     def action_delete_tag(self, _):
         current_tag = self.selection.get_selected_item()
-        if current_tag:
+        if not current_tag:
             return
 
         tag_id = current_tag.tag_id
         parent_id = current_tag.parent_id
         if current_tag:
-            count_files = self.lib_storage.db.select_count_files_by_tag(tag_id)
-            count_child_tags = self.lib_storage.db.select_count_child_tags(tag_id)
+            count_files = current_tag.obj.files.count()
+            count_child_tags = current_tag.obj.children.count()
             if not (count_files or count_child_tags):
                 del self.tags[tag_id]
                 del self.tag_binded_values[tag_id]
@@ -489,7 +487,7 @@ class TagTreeView:
                 list_store = self.tags[parent_id].get_children() if parent_id else self.list_store
                 is_found, position = list_store.find(current_tag) # TODO: если ищет методом перебора, то найти решение без перебора
                 list_store.remove(position)
-                self.lib_storage.db.delete_tag(tag_id)
+                current_tag.obj.delete()
                 
 
 class ScanWindow(Gtk.ApplicationWindow):
@@ -525,57 +523,56 @@ class ScanWindow(Gtk.ApplicationWindow):
     def progress_current_file(self, full_path):
         self.builder.current_file.props.label = str(full_path)
 
-    def action_delete_duplicate(self, _, builder, inserted_filepath):
+    def action_delete_duplicate(self, _, builder, inserted_anyfile):
         try:
-            (config.storage_books / inserted_filepath).unlink()
+            inserted_anyfile.abspath.unlink()
             builder.button_inserted.props.sensitive = False
             builder.button_existed.props.sensitive = False
         except Exception as error:
             print(error)
 
-    def action_delete_duplicate_from_base(self, _, builder, inserted_filepath, existed_filepath, file_hash):
+    def action_delete_duplicate_from_base(self, _, builder, inserted_anyfile, existed_anyfile):
         try:
             import os.path
-            (config.storage_books / existed_filepath).unlink()
-            dirname, basename = os.path.split(inserted_filepath)
-            self.lib_storage.db.update(file_hash, dirname, basename)
+            existed_anyfile.abspath.unlink()
+            self.lib_storage.db.update(existed_anyfile.hash, inserted_anyfile.directory, inserted_anyfile.filename)
             builder.button_inserted.props.sensitive = False
             builder.button_existed.props.sensitive = False
         except Exception as error:
             print(error)
 
-    def action_delete_from_database(self, _, builder, file_hash):
-        self.lib_storage.db.delete_file(file_hash)
+    def action_delete_from_database(self, _, builder, existed_anyfile):
+        existed_anyfile.delete()
         builder.button_delete.props.sensitive = False
 
-    def action_delete_new_file(self, _, builder, inserted_filepath, file_hash):
+    def action_delete_new_file(self, _, builder, inserted_anyfile):
         try:
-            (config.storage_books / inserted_filepath).unlink()
-            self.lib_storage.db.delete_file(file_hash)
+            inserted_anyfile.abspath.unlink()
+            inserted_anyfile.delete()
             builder.button_delete.props.sensitive = False        
         except Exception as error:
             print(error)
 
-    def add_file_item(self, status, existed_filepath, inserted_filepath, file_hash):
+    def add_file_task_card(self, status, inserted_anyfile, existed_anyfile):
         if status == STATUS_UNTOUCHED:
             return
 
         builder = WindowBuilder(XML_DIR / self.task_item_widgets[status], {})
         if hasattr(builder, 'inserted_path'):
-            builder.inserted_path.props.label = inserted_filepath
+            builder.inserted_path.props.label = inserted_anyfile.relpath
 
         if hasattr(builder, 'existed_path'):
-            builder.existed_path.props.label = existed_filepath
+            builder.existed_path.props.label = existed_anyfile.relpath
 
         if status == STATUS_DUPLICATE:
-            builder.button_inserted.connect('clicked', self.action_delete_duplicate, builder, inserted_filepath)
-            builder.button_existed.connect('clicked', self.action_delete_duplicate_from_base, builder, inserted_filepath, existed_filepath, file_hash)
+            builder.button_inserted.connect('clicked', self.action_delete_duplicate, builder, inserted_anyfile)
+            builder.button_existed.connect('clicked', self.action_delete_duplicate_from_base, builder, inserted_anyfile, existed_anyfile)
         elif status == STATUS_DELETED:
-            builder.button_delete.connect('clicked', self.action_delete_from_database, builder, file_hash)
+            builder.button_delete.connect('clicked', self.action_delete_from_database, builder, existed_anyfile)
         elif status == STATUS_NEW:
             self.count_new += 1
             self.builder.count_new_files.props.label = str(self.count_new)
-            builder.button_delete.connect('clicked', self.action_delete_new_file, builder, inserted_filepath, file_hash)
+            builder.button_delete.connect('clicked', self.action_delete_new_file, builder, inserted_anyfile)
 
         builder.root_widget.set_name('item-task')
         self.builder.books.append(builder.root_widget)
@@ -585,12 +582,11 @@ class ScanWindow(Gtk.ApplicationWindow):
 
     def fg_scan(self):
         self.lib_storage.scan_to_db(
-            config.storage_books,
             'original',
             progress_count_scanned_files=self.progress_count_scanned_files,
             progress_current_file=self.progress_current_file,
             func_finished=self.func_finished,
-            func=self.add_file_item,
+            func=self.add_file_task_card,
         )
         self.emit('scan_end')
 
@@ -600,12 +596,10 @@ class FileWindow(Gtk.ApplicationWindow):
         super().__init__(*args, **kwargs)
         self.lib_storage = lib_storage
         self.item = item
+        self.obj = item.obj
 
         self.builder = WindowBuilder(XML_DIR / 'file_window.xml', {})
         self.set_child(self.builder.root_widget)
-        
-        self.note_name = f'книга_{item.book_id}.md'
-        self.note_path = config.storage_notes / self.note_name
 
         self.builder.file_name.set_name('item-file-title')
         self.builder.file_name.props.label = item.title
@@ -613,7 +607,7 @@ class FileWindow(Gtk.ApplicationWindow):
         
         self.builder.open_note.connect('clicked', self.open_note)
         self.builder.create_note.connect('clicked', self.create_note)
-        if self.note_path.exists():
+        if self.obj.note_path.exists():
             self.builder.create_note.props.visible = False
             self.builder.open_note.props.visible = True
         else:
@@ -621,15 +615,16 @@ class FileWindow(Gtk.ApplicationWindow):
             self.builder.open_note.props.visible = False
 
     def open_note(self, _):
-        open_file_with_default_program(f'obsidian://open?file={self.note_name}')
+        open_file_with_default_program(f'obsidian://open?file={self.obj.note_name}')
 
     def create_note(self, _):
-        if not self.note_path.exists():
-            with self.note_path.open('w', encoding='utf-8') as note_file:
+        if not self.obj.note_path.exists():
+            with self.obj.note_path.open('w', encoding='utf-8') as note_file:
                 note_file.write(f'# {self.item.title}\n')
 
         self.builder.create_note.props.visible = False
         self.builder.open_note.props.visible = True
+
 
 class ExportWindow(Gtk.ApplicationWindow):
     def __init__(self, lib_storage, *args, **kwargs):
@@ -647,10 +642,8 @@ class ExportWindow(Gtk.ApplicationWindow):
         self.builder.current_page.props.label = str(current_page)
 
     def fg_export(self):
-        exporter = MarkdownExporter(config.storage_notes, config.storage_books)
-
         self.lib_storage.export_db(
-            exporter,
+            MarkdownExporter,
             self.progress_count_exported_files,
         )
 
@@ -685,7 +678,6 @@ class AppWindow(Gtk.ApplicationWindow):
 
         self.builder.button_scan.connect('clicked', self.on_scan)
         self.builder.button_export.connect('clicked', self.on_export)
-        self.lib_storage.set_db(DBStorage(config.db_path))
 
         #builder.button_show_meeting.connect('clicked', self.on_show_entities, Meeting, db.Meeting)
         
@@ -723,16 +715,16 @@ class AppWindow(Gtk.ApplicationWindow):
         search = self.builder.search_entry.props.text if self.builder.search_entry.props.text else None
         tags = self.tags if self.tags else None
         self.book_list.clear()
-        for book_hash, book_id, directory, filename in self.lib_storage.db.select_rows(tags, search=search):
-            self.book_list.append(book_id, Path(directory) / filename)
+        for anyfile in self.lib_storage.db.select_rows(tags, search=search):
+            self.book_list.append(anyfile)
         
         self.builder.count_files_found.props.label = str(self.lib_storage.db.select_count(tags, search=search))
 
     def build_tags(self, parent_id=None):
         parents = []
-        for tag_id, tag_name in self.lib_storage.db.select_tags(parent_id):
-            self.tag_tree.append(tag_id, tag_name, False, parent_id)
-            parents.append(tag_id)
+        for tag in self.lib_storage.db.select_tags(parent_id):
+            self.tag_tree.append(tag, False, parent_id)
+            parents.append(tag.pk)
 
         for next_parent in parents:
             self.build_tags(next_parent)

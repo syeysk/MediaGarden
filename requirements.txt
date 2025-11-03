@@ -1,3 +1,4 @@
 jinja2==3.1.6
 pycairo==1.28.0
 PyGObject==3.52.3
+Django==5.2.1

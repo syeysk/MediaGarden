@@ -17,6 +17,17 @@ STATUS_DUPLICATE = 'Дубликат'
 LIBRARY_IGNORE_EXTENSIONS = ['db', 'db-journal']
 
 
+import os
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings') 
+django.setup()
+
+from django.conf import settings
+from django.db.models import Q, Count
+from db.models import AnyFile, Tag
+
+
 def get_file_hash(file_path):
     BLOCKSIZE = 65536
     hasher = hashlib.blake2s()
@@ -32,295 +43,99 @@ def get_file_hash(file_path):
 class DBStorage:
     COUNT_ROWS_FOR_INSERT = 30
     COUNT_ROWS_ON_PAGE = 10
-    SQL_INSERT_ROW = 'INSERT INTO files (hash, directory, filename) VALUES (?, ?, ?)'
-    SQL_INSERT_ROW_WITH_ID = 'INSERT INTO files (hash, id, directory, filename) VALUES (?, ?, ?, ?)'
-    SQL_SELECT_FILE = 'SELECT directory, filename FROM files WHERE hash=?'
-    SQL_SELECT_COUNT_ROWS = 'SELECT COUNT(id) FROM files'
-    SQL_CREATE_TABLE = '''
-        CREATE TABLE IF NOT EXISTS files (
-            hash VARCHAR(64) UNIQUE,
-            id INTEGER PRIMARY KEY,
-            directory VARCHAR(255),
-            filename VARCHAR(255),
-            is_deleted INT NOT NULL DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS tags (
-            id INTEGER PRIMARY KEY,
-            name VARCHAR(255),
-            parent_id INTEGER DEFAULT NULL
-        );
-        CREATE TABLE IF NOT EXISTS file_tag (
-            file_id INTEGER NOT NULL,
-            tag_id INTEGER NOT NULL
-        );'''
-    SQL_DELETE_FILE = 'DELETE FROM files WHERE hash=?'
-    SQL_DELETE_FILES = 'DELETE FROM files WHERE id IN (%s)'
-    SQL_UPDATE_SET_IS_DELETED_FOR_ALL = 'UPDATE files SET is_deleted=1'
-    SQL_UPDATE_SET_IS_DELETED = 'UPDATE files SET is_deleted=0 WHERE hash=?'
-    SQL_UPDATE_FILE = 'UPDATE files SET directory=?, filename=? WHERE hash=?'
-
-    SQL_INSERT_TAG = 'INSERT INTO tags (name, parent_id) VALUES (?, ?)'
-    SQL_IMPORT_TAG = 'INSERT INTO tags (id, name, parent_id) VALUES (?, ?, ?)'
-    SQL_SELECT_TAGS = 'SELECT id, name FROM tags WHERE parent_id=?'
-    SQL_SELECT_TAGS_NULL = 'SELECT id, name FROM tags WHERE parent_id IS NULL'
-    SQL_SELECT_ALL_TAGS = 'SELECT id, name, parent_id FROM tags'
-    SQL_SELECT_TAG = 'SELECT name, parent_id FROM tags WHERE id=?'
-    SQL_UPDATE_TAG = 'UPDATE tags SET name=? WHERE id=?'
-    SQL_DELETE_TAG = 'DELETE FROM tags WHERE id=?'
-
-    SQL_SELECT_ALL_TAG_FILE = 'SELECT file_id, tag_id FROM file_tag'
-    SQL_SELECT_COUNT_FILES_FOR_TAG = 'SELECT COUNT(file_id) FROM file_tag WHERE tag_id=?'
-    SQL_SELECT_COUNT_CHILD_TAGS = 'SELECT COUNT(id) FROM tags WHERE parent_id=?'
-    
-    SQL_SELECT_TAGS_BY_FILE = 'SELECT tags.name, tags.id FROM file_tag INNER JOIN tags ON file_tag.tag_id = tags.id WHERE file_tag.file_id=? ORDER BY tags.name'
-    SQL_INSERT_TAG_TO_FILE = 'INSERT INTO file_tag (file_id, tag_id) VALUES (?, ?)'
-    SQL_IMPORT_TAG_TO_FILE = 'INSERT INTO file_tag (file_id, tag_id) VALUES (?, ?)'
-    SQL_CHECK_TAG_FILE = 'SELECT 1 FROM file_tag WHERE file_id=? AND tag_id=? LIMIT 1'
-    SQL_DELETE_TAG_FROM_FILE = 'DELETE FROM file_tag WHERE file_id=? AND tag_id=?'
 
     def insert_tag(self, name, parent_id=None):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_INSERT_TAG, (name, parent_id))
-        tag_id = self.cu.lastrowid
-        self.c.commit()
-        return tag_id
-
-    def import_tag(self, tag_id, name, parent_id):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_IMPORT_TAG, (tag_id, name, parent_id))
-        self.c.commit()
+        tag = Tag(name=name, parent_id=parent_id)
+        tag.save()
+        return tag
 
     def select_tags(self, parent_id=None):
-        self.smart_reopen()
-        sql = self.SQL_SELECT_TAGS if parent_id else self.SQL_SELECT_TAGS_NULL
-        params = (parent_id,) if parent_id else ()
-        for row in self.cu.execute(sql, params).fetchall():
-            yield row
-
-    def update_tag(self, tag_id, new_name):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_UPDATE_TAG, (new_name, tag_id))
-        self.c.commit()
-
-    def select_all_tags(self):
-        self.smart_reopen()
-        for row in self.cu.execute(self.SQL_SELECT_ALL_TAGS).fetchall():
-            yield row
-
-    def select_tag(self, tag_id):
-        self.smart_reopen()
-        return self.cu.execute(self.SQL_SELECT_TAG, (tag_id,)).fetchone()
+        return Tag.objects.filter(parent_id=parent_id)
 
     def select_tags_by_file(self, file_id):
-        self.smart_reopen()
-        for row in self.cu.execute(self.SQL_SELECT_TAGS_BY_FILE, (file_id,)).fetchall():
-            yield row
-
-    def delete_tag(self, tag_id):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_DELETE_TAG, (tag_id,))
-        self.c.commit()
-
-    def select_count_files_by_tag(self, tag_id):
-        self.smart_reopen()
-        for row in self.cu.execute(self.SQL_SELECT_COUNT_FILES_FOR_TAG, (tag_id,)).fetchall():
-            return row[0]
-
-    def select_count_child_tags(self, tag_id):
-        self.smart_reopen()
-        for row in self.cu.execute(self.SQL_SELECT_COUNT_CHILD_TAGS, (tag_id,)).fetchall():
-            return row[0]
+        anyfile = AnyFile.objects.filter(pk=file_id).first()
+        for tag in anyfile.tags.order_by('name').values_list('name', 'id'):
+            yield tag
 
     def assign_tag(self, tag_id, file_id):
-        self.smart_reopen()
-        sql_params = (file_id, tag_id)
-        if self.cu.execute(self.SQL_CHECK_TAG_FILE, sql_params).fetchone():
+        anyfile = AnyFile.objects.filter(pk=file_id).first()
+        if anyfile.tags.filter(pk=tag_id).first():
             return False
 
-        self.cu.execute(self.SQL_INSERT_TAG_TO_FILE, sql_params)
-        self.c.commit()
+        tag = Tag.objects.filter(pk=tag_id).first()
+        tag.files.add(anyfile)
         return True
 
-    def import_tag_file(self, tag_id, file_id):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_IMPORT_TAG_TO_FILE, (tag_id, file_id))
-        self.c.commit()
-
     def unassign_tag(self, tag_id, file_id):
-        self.smart_reopen()
-        sql_params = (file_id, tag_id)
-        self.cu.execute(self.SQL_DELETE_TAG_FROM_FILE, sql_params)
-        self.c.commit()
+        anyfile = AnyFile.objects.filter(pk=file_id).first()
+        tag = Tag.objects.filter(pk=tag_id).first()
+        anyfile.tags.remove(tag)
 
-    def select_all_tag_files(self):
-        self.smart_reopen()
-        for row in self.cu.execute(self.SQL_SELECT_ALL_TAG_FILE).fetchall():
-            yield row
-
-    def __init__(self, db_path: Path) -> None:
-        self.db_path = db_path
-        self.c = sqlite3.connect(db_path)
-        self.cu = self.c.cursor()
-        self.cu.executescript(self.SQL_CREATE_TABLE)
+    def __init__(self) -> None:
         self.seq_sql_params = []
         self.duplicates_by_hash = {}
         self.ident = current_thread().ident
 
-    def reopen(self):
-        """
-        Переоткрывает существующую базу.
-        Вызываем метод внутри дочернего потока и после выхода из дочернего потока - в родительском """
-        self.c = sqlite3.connect(self.db_path)
-        self.cu = self.c.cursor()
-
-    def smart_reopen(self):
-        ident = current_thread().ident
-        if self.ident != ident:
-            self.reopen()
-            self.ident = ident
-    
-    def close(self):
-        self.smart_reopen()
-        self.c.close()
-
-    def clear(self) -> None:
-        self.smart_reopen()
-        self.cu.execute('DELETE FROM files WHERE 1=1')
-        self.c.commit()
-
-    def get_count_rows(self) -> int:
-        self.smart_reopen()
-        total_rows_count = self.cu.execute(self.SQL_SELECT_COUNT_ROWS).fetchone()
-        return total_rows_count[0]
-
-    def get_count_pages(self) -> int:
-        total_rows_count = self.get_count_rows()
+    def get_count_pages(self, total_rows_count) -> int:
         count_pages = total_rows_count // self.COUNT_ROWS_ON_PAGE
         return count_pages + 1 if total_rows_count % self.COUNT_ROWS_ON_PAGE > 0 else count_pages
 
     def append_row(self, row: tuple) -> None:
-        self.seq_sql_params.append(row)
+        anyfile = AnyFile(hash=row[0], directory=row[1], filename=row[2])
+        self.seq_sql_params.append(anyfile)
 
     def is_ready_for_insert(self) -> bool:
         return len(self.seq_sql_params) == self.COUNT_ROWS_FOR_INSERT
 
-    def insert_rows(self, with_id: bool = True, func=None):
+    def insert_rows(self, func=None):
         """
         Добавляет список файлов в базу
-        :param with_id:
         :param func:
         иначе - возбуждать исключение
         :return:
         """
-        self.smart_reopen()
-        sql_insert = self.SQL_INSERT_ROW_WITH_ID if with_id else self.SQL_INSERT_ROW
-        for sql_params in self.seq_sql_params:
-            file_hash = sql_params[0]
-            row = self.cu.execute(self.SQL_SELECT_FILE, (file_hash,)).fetchone()
-            inserted_directory, inserted_filename = sql_params[2 if with_id else 1:]
-            if row:
-                existed_directory, existed_filename = row
-                self.set_is_not_deleted(file_hash)
+        # https://docs.djangoproject.com/en/5.2/ref/models/querysets/#bulk-create
+        for inserted_anyfile in self.seq_sql_params:
+            existed_anyfile = AnyFile.objects.filter(hash=inserted_anyfile.hash).first()
+            if existed_anyfile:
+                existed_anyfile.is_deleted = False
+                existed_anyfile.save()
             else:
-                self.cu.execute(sql_insert, sql_params)
-                existed_directory, existed_filename = None, None
+                inserted_anyfile.save()
 
             if func:
                 func(
-                    inserted_directory,
-                    inserted_filename,
-                    existed_directory,
-                    existed_filename,
-                    file_hash,
+                    inserted_anyfile,
+                    existed_anyfile,
                 )
 
-        self.c.commit()
         self.seq_sql_params.clear()
     
-    def _sql_builder(self, tags=None, only_deleted=False, order_by='files.filename', only_count=False, search=''):
-        sql_params = []
-        sql = ['SELECT']
-        sql_where = []
-        
-        if only_count:
-            sql.append('COUNT(DISTINCT files.id)')
-        else:
-            sql.append('files.hash, files.id, files.directory, files.filename')
-        
-        sql.append('FROM files')
-        
-        if tags:
-            sql.append('JOIN file_tag ON files.id = file_tag.file_id')
-        
-        if tags:
-            sql_where.append('file_tag.tag_id IN (%s)' % ', '.join('?'*len(tags)))
-            sql_params.extend(tags)
-
-        if only_deleted:
-            sql_where.append('files.is_deleted = 1')
-
+    def _build_queryset(self, tags=None, only_count=False, search=''):
+        queryset = AnyFile.objects
         if search:
-            sql_where.append('(files.directory LIKE ? OR files.filename LIKE ?)')
-            sql_params.extend((f'%{search}%', f'%{search}%'))
+            queryset = queryset.filter(Q(directory__contains=search) | Q(filename__contains=search))
+        
+        if tags:
+            queryset = queryset.filter(tags__pk__in=tags).annotate(Count('pk'))
 
-        if sql_where:
-            sql.append('WHERE')
-            sql.append(' AND '.join(sql_where))
+        return queryset
 
-        if not only_count:
-            sql.append(f'GROUP BY files.id ORDER BY {order_by} LIMIT ?,?')
+    def select_count(self, tags=None, search=''):
+        return self._build_queryset(tags, search).count()
 
-        return ' '.join(sql), sql_params
-
-    def select_count(self, tags=None, only_deleted=False, order_by='files.filename', search=''):
-        sql, sql_params = self._sql_builder(tags, only_deleted, order_by, True, search)
-        rows = self.cu.execute(sql, sql_params).fetchall()
-        return rows[0][0] if rows else 0
-
-    def select_rows(self, tags=None, only_deleted=False, order_by='files.filename', search=''):
-        self.smart_reopen()
-        count_files = self.select_count(tags, only_deleted, order_by, search)
-        sql, sql_params = self._sql_builder(tags, only_deleted, order_by, False, search)
-
-        count_pages = self.get_count_pages()
+    def select_rows(self, tags=None, search=''):
+        queryset = self._build_queryset(tags, search).order_by('filename')
+        count_pages = self.get_count_pages(queryset.count())
         for page_num in range(count_pages):
-            all_sql_params = [*sql_params, page_num * self.COUNT_ROWS_ON_PAGE, self.COUNT_ROWS_ON_PAGE]
-            for row in self.cu.execute(sql, all_sql_params).fetchall():
-                yield row
-
-    def set_is_deleted_for_all(self):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_UPDATE_SET_IS_DELETED_FOR_ALL)
-        self.c.commit()
-
-    def set_is_not_deleted(self, file_hash):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_UPDATE_SET_IS_DELETED, (file_hash,))
-
-    def process_deleted_files(self, func):
-        for file_hash, file_id, existed_directory, existed_filename in self.select_rows(only_deleted=True):
-            existed_path = '{}/{}'.format(existed_directory, existed_filename)  # .removeprefix('/')
-            existed_path = existed_path[1:] if existed_path.startswith('/') else existed_path
-            if func:
-                func(STATUS_DELETED, existed_path, None, file_hash)
-
-    def delete_file(self, file_hash):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_DELETE_FILE, (file_hash, ))
-        self.c.commit()
+            for anyfile in queryset[page_num * self.COUNT_ROWS_ON_PAGE:self.COUNT_ROWS_ON_PAGE]:
+                yield anyfile
 
     def insert_file(self, file_hash, file_id, inserted_file):
-        self.smart_reopen()
-        self.cu.execute(
-            self.SQL_INSERT_ROW_WITH_ID,
-            (file_hash, file_id, os.path.dirname(inserted_file), os.path.basename(inserted_file))
-        )
-        self.c.commit()
+        AnyFile(hash=file_hash, pk=file_id, directory=os.path.dirname(inserted_file), filename=os.path.basename(inserted_file))
 
     def update(self, file_hash, inserted_directory, inserted_filename):
-        self.smart_reopen()
-        self.cu.execute(self.SQL_UPDATE_FILE, (inserted_directory, inserted_filename, file_hash))
-        self.c.commit()
+        AnyFile.objects.filter(hash=file_hash).update(directory=inserted_directory, filename=inserted_filename)
 
 
 class LibraryStorage:
@@ -334,21 +149,16 @@ class LibraryStorage:
 
     def __init__(self) -> None:
         """Инициализирует класс сканера хранилища"""
-        self.db = None
+        self.db = DBStorage()
 
     def __enter__(self):
         return self
 
     def __exit__(self, _1, _2, _3):
-        if self.db:
-            self.db.close()
-
-    def set_db(self, db):
-        self.db = db
+        pass
 
     def scan_to_db(
             self,
-            library_path: Path,
             process_dublicate,
             progress_count_scanned_files=None,
             progress_current_file=None,
@@ -356,22 +166,18 @@ class LibraryStorage:
             func=None,
     ):
         """Сканирует информацию о файлах в директории и заносит её в базу"""
-        def process_file_status(inserted_directory,
-                    inserted_filename,
-                    existed_directory,
-                    existed_filename,
-                    file_hash,):
-            status, existed_path, inserted_path = self.get_file_status(inserted_directory, inserted_filename, existed_directory, existed_filename)
+        def process_file_status(inserted_anyfile, existed_anyfile):
+            status = self.get_file_status(inserted_anyfile, existed_anyfile)
             if status != STATUS_NEW:
                 if process_dublicate == 'original':
                     if status in {STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED}:
-                        self.db.update(file_hash, inserted_directory, inserted_filename)
+                        self.db.update(inserted_anyfile.hash, inserted_anyfile.directory, inserted_anyfile.filename)
 
             if func:
-                func(status, existed_path, inserted_path, file_hash)
+                func(status, inserted_anyfile, existed_anyfile)
 
-        self.db.set_is_deleted_for_all()
-        os.chdir(library_path)
+        AnyFile.objects.update(is_deleted=True)
+        os.chdir(settings.STORAGE_BOOKS)
         total_count_files = 0
         for directory, _, filenames in os.walk('./'):
             directory = directory[2:]
@@ -393,25 +199,29 @@ class LibraryStorage:
                     progress_count_scanned_files(total_count_files)
 
                 if self.db.is_ready_for_insert():
-                    self.db.insert_rows(with_id=False, func=process_file_status)
+                    self.db.insert_rows(func=process_file_status)
 
-        self.db.insert_rows(with_id=False, func=process_file_status)
-        self.db.process_deleted_files(func)
+        self.db.insert_rows(func=process_file_status)
+        for existed_anyfile in AnyFile.objects.filter(is_deleted=True):
+            if func:
+                func(STATUS_DELETED, None, existed_anyfile)
+
         if func_finished:
             func_finished()
 
-    def export_db(self, exporter, progress_count_exported_files=None) -> None:
+    def export_db(self, exporter_class, progress_count_exported_files=None) -> None:
         """
         Экспортирует из базы следующую информацию о файле:
         хэш,идентификатор,директория,имя файла
         """
         csv_current_page = 1
+        exporter = exporter_class(settings.STORAGE_NOTES, settings.STORAGE_BOOKS)
         exporter.open_new_page(csv_current_page)
         number_of_last_row_on_current_page = self.CSV_COUNT_ROWS_ON_PAGE
-        count_rows = self.db.get_count_rows()
+        count_rows = AnyFile.objects.count()
         index_of_current_row = None
-        for index_of_current_row, row in enumerate(self.db.select_rows(order_by='files.id')):
-            number_of_last_row_on_current_page = number_of_last_row_on_current_page - row[1] + 1
+        for index_of_current_row, anyfile in enumerate(AnyFile.objects.order_by('id')):
+            number_of_last_row_on_current_page = number_of_last_row_on_current_page - anyfile.pk + 1
             if index_of_current_row >= number_of_last_row_on_current_page:
                 exporter.close(is_last_page=index_of_current_row == count_rows - 1)
                 number_of_last_row_on_current_page += self.CSV_COUNT_ROWS_ON_PAGE
@@ -420,8 +230,8 @@ class LibraryStorage:
                 if progress_count_exported_files:
                     progress_count_exported_files(index_of_current_row + 1, count_rows, csv_current_page)
 
-            exporter.write_row(row)
-            number_of_last_row_on_current_page += row[1]
+            exporter.write_row((anyfile.hash, anyfile.id, anyfile.directory, anyfile.filename))
+            number_of_last_row_on_current_page += anyfile.pk
 
         if progress_count_exported_files and index_of_current_row is not None:
             progress_count_exported_files(index_of_current_row + 1, count_rows, csv_current_page)
@@ -431,19 +241,20 @@ class LibraryStorage:
         import csv
         with open(os.path.join(exporter.storage_structure, 'tags.csv'), 'w', encoding='utf-8', newline='\n') as csv_file:
             csv_writer = csv.writer(csv_file)
-            for row in self.db.select_all_tags():
+            for row in Tag.objects.values_list('pk', 'name', 'parent_id'):
                 csv_writer.writerow(row)
 
         with open(os.path.join(exporter.storage_structure, 'tags-files.csv'), 'w', encoding='utf-8', newline='\n') as csv_file:
             csv_writer = csv.writer(csv_file)
-            for row in self.db.select_all_tag_files():
-                csv_writer.writerow(row)
+            for tag in Tag.objects.all():
+                for row in tag.files.values_list('pk'):
+                    csv_writer.writerow((row[0], tag.pk))
 
     def import_csv_to_db(self, csv_path):
-        def process_file_status(*args):
-            status, existed_path, inserted_path = self.get_file_status(*args[:4])
-            if args[2]:
-                raise Exception(self.MESSAGE_DOUBLE_IMPORT.format(inserted_path, existed_path))
+        def process_file_status(inserted_anyfile, existed_anyfile):
+            status = self.get_file_status(inserted_anyfile, existed_anyfile)
+            if existed_anyfile:
+                raise Exception(self.MESSAGE_DOUBLE_IMPORT.format(inserted_anyfile.relpath, existed_anyfile.relpath))
 
         for csv_filename in os.scandir(csv_path):
             with open(csv_filename.path, 'r', encoding='utf-8', newline='\n') as csv_file:
@@ -456,28 +267,24 @@ class LibraryStorage:
 
         with open(os.path.join(csv_path, 'tags.csv'), 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):
-                self.db.import_tag(*csv_row)
+                Tag(pk=csv_row[0], name=csv_row[1], parent_id=csv_row[2]).create()
 
         with open(os.path.join(csv_path, 'tags-files.csv'), 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):
-                self.db.import_tag_file(*csv_row)
+                self.db.assign_tag(tag_id=csv_row[0], file_id=csv_row[1])
 
-    def get_file_status(self, inserted_directory, inserted_filename, existed_directory, existed_filename):
-        inserted_path = '{}/{}'.format(inserted_directory, inserted_filename)  # .removeprefix('/')
-        inserted_path = inserted_path[1:] if inserted_path.startswith('/') else inserted_path
-        if existed_directory is not None:
-            existed_path = '{}/{}'.format(existed_directory, existed_filename)  # .removeprefix('/')
-            existed_path = existed_path[1:] if existed_path.startswith('/') else existed_path
-            is_replaced = inserted_directory != existed_directory
-            is_renamed = inserted_filename != existed_filename
-            is_exists = os.path.exists(existed_path)
-            if is_replaced and not is_renamed:
-                return STATUS_DUPLICATE if is_exists else STATUS_MOVED, existed_path, inserted_path
-            elif not is_replaced and is_renamed:
-                return STATUS_DUPLICATE if is_exists else STATUS_RENAMED, existed_path, inserted_path
-            elif is_replaced and is_renamed:
-                return STATUS_DUPLICATE if is_exists else STATUS_MOVED_AND_RENAMED, existed_path, inserted_path
+    def get_file_status(self, inserted_anyfile, existed_anyfile):
+        if existed_anyfile is None:
+            return STATUS_NEW
 
-            return STATUS_UNTOUCHED, existed_path, inserted_path
+        is_replaced = inserted_anyfile.directory != existed_anyfile.directory
+        is_renamed = inserted_anyfile.filename != existed_anyfile.filename
+        is_exists = os.path.exists(existed_anyfile.relpath)
+        if is_replaced and not is_renamed:
+            return STATUS_DUPLICATE if is_exists else STATUS_MOVED
+        elif not is_replaced and is_renamed:
+            return STATUS_DUPLICATE if is_exists else STATUS_RENAMED
+        elif is_replaced and is_renamed:
+            return STATUS_DUPLICATE if is_exists else STATUS_MOVED_AND_RENAMED
 
-        return STATUS_NEW, None, inserted_path
+        return STATUS_UNTOUCHED
