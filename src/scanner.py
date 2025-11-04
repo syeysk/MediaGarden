@@ -80,8 +80,7 @@ class DBStorage:
         count_pages = total_rows_count // self.COUNT_ROWS_ON_PAGE
         return count_pages + 1 if total_rows_count % self.COUNT_ROWS_ON_PAGE > 0 else count_pages
 
-    def append_row(self, row: tuple) -> None:
-        anyfile = AnyFile(hash=row[0], directory=row[1], filename=row[2])
+    def append_row(self, anyfile) -> None:
         self.seq_sql_params.append(anyfile)
 
     def is_ready_for_insert(self) -> bool:
@@ -111,7 +110,7 @@ class DBStorage:
 
         self.seq_sql_params.clear()
     
-    def _build_queryset(self, tags=None, only_count=False, search=''):
+    def _build_queryset(self, tags=None, search=''):
         queryset = AnyFile.objects
         if search:
             queryset = queryset.filter(Q(directory__contains=search) | Q(filename__contains=search))
@@ -128,7 +127,8 @@ class DBStorage:
         queryset = self._build_queryset(tags, search).order_by('filename')
         count_pages = self.get_count_pages(queryset.count())
         for page_num in range(count_pages):
-            for anyfile in queryset[page_num * self.COUNT_ROWS_ON_PAGE:self.COUNT_ROWS_ON_PAGE]:
+            offset = page_num * self.COUNT_ROWS_ON_PAGE
+            for anyfile in queryset[offset:offset + self.COUNT_ROWS_ON_PAGE]:
                 yield anyfile
 
     def insert_file(self, file_hash, file_id, inserted_file):
@@ -193,7 +193,7 @@ class LibraryStorage:
                     progress_current_file(full_path)
 
                 file_hash = get_file_hash(full_path)
-                self.db.append_row((file_hash, directory, filename))
+                self.db.append_row(AnyFile(hash=file_hash, directory=directory, filename=filename))
                 total_count_files += 1
                 if progress_count_scanned_files:
                     progress_count_scanned_files(total_count_files)
@@ -237,8 +237,7 @@ class LibraryStorage:
             progress_count_exported_files(index_of_current_row + 1, count_rows, csv_current_page)
 
         exporter.close(is_last_page=index_of_current_row is None or index_of_current_row == count_rows - 1)
-        
-        import csv
+
         with open(os.path.join(exporter.storage_structure, 'tags.csv'), 'w', encoding='utf-8', newline='\n') as csv_file:
             csv_writer = csv.writer(csv_file)
             for row in Tag.objects.values_list('pk', 'name', 'parent_id'):
@@ -250,28 +249,24 @@ class LibraryStorage:
                 for row in tag.files.values_list('pk'):
                     csv_writer.writerow((row[0], tag.pk))
 
-    def import_csv_to_db(self, csv_path):
-        def process_file_status(inserted_anyfile, existed_anyfile):
-            status = self.get_file_status(inserted_anyfile, existed_anyfile)
-            if existed_anyfile:
-                raise Exception(self.MESSAGE_DOUBLE_IMPORT.format(inserted_anyfile.relpath, existed_anyfile.relpath))
+    def import_csv_to_db(self, progress_count_imported_files):
+        index_of_current_row = 0
+        for csv_filename in os.scandir(settings.STORAGE_NOTES):
+            if csv_filename.name in ('tags.csv', 'tags-files.csv'):
+                continue
 
-        for csv_filename in os.scandir(csv_path):
             with open(csv_filename.path, 'r', encoding='utf-8', newline='\n') as csv_file:
                 for csv_row in csv.reader(csv_file):
-                    self.db.append_row(tuple(csv_row))
-                    if self.db.is_ready_for_insert():
-                        self.db.insert_rows(func=process_file_status)
+                    anyfile = AnyFile.objects.create(pk=csv_row[1], hash=csv_row[0], directory=csv_row[2], filename=csv_row[3])
+                    progress_count_imported_files(index_of_current_row := index_of_current_row + 1)
 
-        self.db.insert_rows(func=process_file_status)
-
-        with open(os.path.join(csv_path, 'tags.csv'), 'r', encoding='utf-8', newline='\n') as csv_file:
+        with open(settings.STORAGE_NOTES / 'tags.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):
-                Tag(pk=csv_row[0], name=csv_row[1], parent_id=csv_row[2]).create()
+                Tag.objects.create(pk=csv_row[0], name=csv_row[1], parent_id=csv_row[2])
 
-        with open(os.path.join(csv_path, 'tags-files.csv'), 'r', encoding='utf-8', newline='\n') as csv_file:
+        with open(settings.STORAGE_NOTES / 'tags-files.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):
-                self.db.assign_tag(tag_id=csv_row[0], file_id=csv_row[1])
+                self.db.assign_tag(tag_id=csv_row[1], file_id=csv_row[0])
 
     def get_file_status(self, inserted_anyfile, existed_anyfile):
         if existed_anyfile is None:

@@ -648,6 +648,24 @@ class ExportWindow(Gtk.ApplicationWindow):
         )
 
 
+class ImportCSVWindow(Gtk.ApplicationWindow):
+    def __init__(self, lib_storage, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lib_storage = lib_storage
+
+        self.builder = WindowBuilder(XML_DIR / 'import_csv.xml', {})
+        self.set_child(self.builder.root_widget)
+
+        run_func_in_thread(self.fg_import)
+
+    def progress_count_imported_files(self, index_of_current_row):
+        self.builder.index_of_current_row.props.label = str(index_of_current_row)
+
+    def fg_import(self):
+        self.lib_storage.import_csv_to_db(self.progress_count_imported_files)
+        print('Импорт завершён')
+
+
 # Source: https://stackoverflow.com/questions/65807310/how-to-get-total-screen-size-in-python-gtk-without-using-deprecated-gdk-screen
 def get_screen_size(display):
     mon_geoms = [monitor.get_geometry() for monitor in display.get_monitors()]
@@ -678,6 +696,7 @@ class AppWindow(Gtk.ApplicationWindow):
 
         self.builder.button_scan.connect('clicked', self.on_scan)
         self.builder.button_export.connect('clicked', self.on_export)
+        self.builder.button_import_csv.connect('clicked', self.on_import_csv)
 
         #builder.button_show_meeting.connect('clicked', self.on_show_entities, Meeting, db.Meeting)
         
@@ -712,13 +731,13 @@ class AppWindow(Gtk.ApplicationWindow):
         self.update_book_list()
  
     def update_book_list(self, _=None, tags=None):
-        search = self.builder.search_entry.props.text if self.builder.search_entry.props.text else None
+        search = self.builder.search_entry.props.text
         tags = self.tags if self.tags else None
         self.book_list.clear()
-        for anyfile in self.lib_storage.db.select_rows(tags, search=search):
+        for anyfile in self.lib_storage.db.select_rows(tags, search):
             self.book_list.append(anyfile)
         
-        self.builder.count_files_found.props.label = str(self.lib_storage.db.select_count(tags, search=search))
+        self.builder.count_files_found.props.label = str(self.lib_storage.db.select_count(tags, search))
 
     def build_tags(self, parent_id=None):
         parents = []
@@ -736,6 +755,10 @@ class AppWindow(Gtk.ApplicationWindow):
 
     def on_export(self, action):
         window = ExportWindow(self.lib_storage, transient_for=self, title='Экспорт', modal=True)
+        window.present()
+    
+    def on_import_csv(self, action):
+        window = ImportCSVWindow(self.lib_storage, transient_for=self, title='Импорт из CSV', modal=True)
         window.present()
 
 

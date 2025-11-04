@@ -13,7 +13,7 @@
 		</Box>
 		<Box spacing="4">
     	    <Button id="button_export">Экспортировать в заметки</Button>
-	        <Button id="button_import" sensitive="False">Импортировать из заметок</Button>
+	        <Button id="button_import_csv">Импортировать из CSV</Button>
 			<!--<Grid>
 				<Row>
 					<Button id="button_change_storage_nnotes" colspan="1">✏️</Button>

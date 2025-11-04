@@ -42,7 +42,7 @@ del data, fjson
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-DEBUG = True
+DEBUG = False
 SECRET_KEY = ''
 SITE_URL = 'http://127.0.0.1'
 ALLOWED_HOSTS = ['*']
