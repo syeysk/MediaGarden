@@ -699,6 +699,11 @@ class AppWindow(Gtk.ApplicationWindow):
         self.builder.button_import_csv.connect('clicked', self.on_import_csv)
 
         #builder.button_show_meeting.connect('clicked', self.on_show_entities, Meeting, db.Meeting)
+        self.builder.search_button.connect('clicked', lambda x: self.update_book_list())
+
+        controller = Gtk.EventControllerKey.new()
+        controller.connect('key_released', self.update_book_list_by_enter)
+        self.builder.search_entry.add_controller(controller)
         
         # Дерево тегов
         
@@ -710,7 +715,6 @@ class AppWindow(Gtk.ApplicationWindow):
         self.builder.button_add_tag.connect('clicked', self.tag_tree.action_new_tag)
         self.builder.button_add_child_tag.connect('clicked', self.tag_tree.action_new_child_tag)
         self.builder.button_delete_tag.connect('clicked', self.tag_tree.action_delete_tag)
-        self.builder.search_button.connect('clicked', lambda x: self.update_book_list())
 
         self.build_tags()
         
@@ -730,7 +734,7 @@ class AppWindow(Gtk.ApplicationWindow):
         self.tags = [str(key) for key, value in all_tags.items() if value]
         self.update_book_list()
  
-    def update_book_list(self, _=None, tags=None):
+    def update_book_list(self, _=None):
         search = self.builder.search_entry.props.text
         tags = self.tags if self.tags else None
         self.book_list.clear()
@@ -760,6 +764,10 @@ class AppWindow(Gtk.ApplicationWindow):
     def on_import_csv(self, action):
         window = ImportCSVWindow(self.lib_storage, transient_for=self, title='Импорт из CSV', modal=True)
         window.present()
+
+    def update_book_list_by_enter(self, keyval, keycode, state, modifier):
+        if keycode == 65293 and not modifier:
+            self.update_book_list()
 
 
 class MyApplication(Gtk.Application):
