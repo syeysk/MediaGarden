@@ -42,7 +42,7 @@ def get_file_hash(file_path):
 
 class DBStorage:
     COUNT_ROWS_FOR_INSERT = 30
-    COUNT_ROWS_ON_PAGE = 10
+    COUNT_ROWS_ON_PAGE = 30
 
     def insert_tag(self, name, parent_id=None):
         tag = Tag(name=name, parent_id=parent_id)
@@ -52,24 +52,15 @@ class DBStorage:
     def select_tags(self, parent_id=None):
         return Tag.objects.filter(parent_id=parent_id)
 
-    def select_tags_by_file(self, file_id):
-        anyfile = AnyFile.objects.filter(pk=file_id).first()
-        for tag in anyfile.tags.order_by('name').values_list('name', 'id'):
-            yield tag
-
     def assign_tag(self, tag_id, file_id):
         anyfile = AnyFile.objects.filter(pk=file_id).first()
         if anyfile.tags.filter(pk=tag_id).first():
             return False
 
         tag = Tag.objects.filter(pk=tag_id).first()
-        tag.files.add(anyfile)
-        return True
-
-    def unassign_tag(self, tag_id, file_id):
-        anyfile = AnyFile.objects.filter(pk=file_id).first()
-        tag = Tag.objects.filter(pk=tag_id).first()
-        anyfile.tags.remove(tag)
+        if tag:
+            tag.files.add(anyfile)
+            return True
 
     def __init__(self) -> None:
         self.seq_sql_params = []

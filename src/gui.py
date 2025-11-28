@@ -181,6 +181,9 @@ class BookListView:
             cell.builder.path._binding.unbind()
             cell.builder.path._binding = None
 
+        item = list_item.get_item()
+        del self.book_widgets[item.book_id]
+
     def _on_factory_teardown(self, factory, list_item):
         cell = list_item.get_child()
         #cell._binding = None
@@ -209,7 +212,7 @@ class BookListView:
         self.list_store.append(item)
     
     def delete_tag(self, _, book, tag_id):
-        self.lib_storage.db.unassign_tag(tag_id, book.book_id)
+        book.obj.tags.filter(pk=tag_id).delete()
         self.populate_tags(book)
         self.update_tag_count(tag_id)
 
@@ -218,7 +221,7 @@ class BookListView:
         while tags.get_first_child():
             tags.remove(tags.get_first_child())
 
-        for tag_name, tag_id in self.lib_storage.db.select_tags_by_file(book.book_id):
+        for tag_name, tag_id in book.obj.tags.order_by('name').values_list('name', 'id'):
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             box.props.margin_end = 6
 
@@ -232,7 +235,6 @@ class BookListView:
 
     def clear(self):
         self.list_store.remove_all()
-        self.book_widgets.clear()
 
 
 class TagNameColumnBuilder:
