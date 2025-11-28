@@ -700,6 +700,7 @@ class AppWindow(Gtk.ApplicationWindow):
 
         #builder.button_show_meeting.connect('clicked', self.on_show_entities, Meeting, db.Meeting)
         self.builder.search_button.connect('clicked', lambda x: self.update_book_list())
+        self.builder.clear_search_button.connect('clicked', self.clear_search)
 
         controller = Gtk.EventControllerKey.new()
         controller.connect('key_released', self.update_book_list_by_enter)
@@ -768,6 +769,10 @@ class AppWindow(Gtk.ApplicationWindow):
     def update_book_list_by_enter(self, keyval, keycode, state, modifier):
         if keycode == 65293 and not modifier:
             self.update_book_list()
+
+    def clear_search(self, _):
+        self.builder.search_entry.props.text = ''
+        self.update_book_list()
 
 
 class MyApplication(Gtk.Application):

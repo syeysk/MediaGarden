@@ -37,6 +37,7 @@
     </Box>
     <Box margin_top="6" margin_end="6" margin_bottom="6">
 	    <Box orientation="HORIZONTAL" margin_bottom="6">
+		    <Button id="clear_search_button">x</Button>
 		    <Entry id="search_entry"></Entry>
 		    <Button id="search_button">Найти</Button>
 		    <Label margin_start="6">Найдено: </Label>
