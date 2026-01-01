@@ -148,7 +148,7 @@ class BookListView:
 
     def open_file_window(self, gesture, count, x, y, item):
         if count == 2:
-            window = FileWindow(self.lib_storage, item, transient_for=self.parent, title='Файл', modal=True)
+            window = FileWindow(item, transient_for=self.parent, title='Файл', modal=True)
             window.present()
 
     def _on_factory_bind(self, factory, list_item):
@@ -179,7 +179,7 @@ class BookListView:
 
     def on_drop(self, _ctrl, value, _x, _y, file_item):
         if isinstance(value, Tag):
-            self.lib_storage.db.assign_tag(value.tag_id, file_item.book_id)
+            value.obj.files.add(file_item.obj)
             self.populate_tags(file_item)
             self.update_tag_count(value.tag_id)
 
@@ -200,8 +200,7 @@ class BookListView:
         cell = list_item.get_child()
         #cell._binding = None
 
-    def __init__(self, parent, lib_storage, update_tag_count):
-        self.lib_storage = lib_storage
+    def __init__(self, parent, update_tag_count):
         self.update_tag_count = update_tag_count
         self.parent = parent
         factory = Gtk.SignalListItemFactory()
@@ -223,24 +222,24 @@ class BookListView:
         item.obj = anyfile
         self.list_store.append(item)
     
-    def delete_tag(self, _, book, tag_id):
-        book.obj.tags.filter(pk=tag_id).delete()
+    def unassing_tag(self, _, book, tag_obj):
+        book.obj.tags.remove(tag_obj)
         self.populate_tags(book)
-        self.update_tag_count(tag_id)
+        self.update_tag_count(tag_obj.pk)
 
     def populate_tags(self, book):
         tags = self.book_widgets[book.book_id].builder.tags
         while tags.get_first_child():
             tags.remove(tags.get_first_child())
 
-        for tag_name, tag_id in book.obj.tags.order_by('name').values_list('name', 'id'):
+        for tag_obj in book.obj.tags.order_by('name'):
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             box.props.margin_end = 6
 
-            label = Gtk.Label(label=tag_name)
+            label = Gtk.Label(label=tag_obj.name)
             label.set_name('assinged-tag-name')
             button = Gtk.Button(label='x')
-            button.connect('clicked', self.delete_tag, book, tag_id)
+            button.connect('clicked', self.unassing_tag, book, tag_obj)
             
             box.append(label)
             box.append(button)
@@ -548,7 +547,7 @@ class ScanWindow(Gtk.ApplicationWindow):
         try:
             import os.path
             existed_anyfile.abspath.unlink()
-            self.lib_storage.db.update(existed_anyfile.hash, inserted_anyfile.directory, inserted_anyfile.filename)
+            existed_anyfile.update_path(inserted_anyfile.directory, inserted_anyfile.filename)
             builder.button_inserted.props.sensitive = False
             builder.button_existed.props.sensitive = False
         except Exception as error:
@@ -587,28 +586,25 @@ class ScanWindow(Gtk.ApplicationWindow):
             self.count_new += 1
             self.builder.count_new_files.props.label = str(self.count_new)
             builder.button_delete.connect('clicked', self.action_delete_new_file, builder, inserted_anyfile)
+        elif status in {STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED}:
+            existed_anyfile.update_path(inserted_anyfile.directory, inserted_anyfile.filename)
 
         builder.root_widget.set_name('item-task')
         self.builder.books.append(builder.root_widget)
     
-    def func_finished(self):
-        print('Сканирование завершено')
-
     def fg_scan(self):
         self.lib_storage.scan_to_db(
-            'original',
             progress_count_scanned_files=self.progress_count_scanned_files,
             progress_current_file=self.progress_current_file,
-            func_finished=self.func_finished,
             func=self.add_file_task_card,
         )
+        print('Сканирование завершено')
         self.emit('scan_end')
 
 
 class FileWindow(Gtk.ApplicationWindow):
-    def __init__(self, lib_storage, item, *args, **kwargs):
+    def __init__(self, item, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lib_storage = lib_storage
         self.item = item
         self.obj = item.obj
 
@@ -691,9 +687,9 @@ def get_screen_size(display):
 
 
 class AppWindow(Gtk.ApplicationWindow):
-    def __init__(self, lib_storage, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lib_storage = lib_storage
+        self.lib_storage = LibraryStorage()
 
         x, y = get_screen_size(Gdk.Display.get_default())
         self.set_default_size(min(x, 1000), y)
@@ -739,7 +735,7 @@ class AppWindow(Gtk.ApplicationWindow):
         self.builder.scrolled_books.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.builder.scrolled_books.set_propagate_natural_height(True)
 
-        self.book_list = BookListView(self, self.lib_storage, self.tag_tree.update_tag_count)
+        self.book_list = BookListView(self, self.tag_tree.update_tag_count)
         self.builder.books.append(self.book_list.view)
         
         self.tags = []
@@ -796,10 +792,9 @@ class AppWindow(Gtk.ApplicationWindow):
 
 
 class MyApplication(Gtk.Application):
-    def __init__(self, lib_storage):
+    def __init__(self):
         super().__init__(application_id='org.syeysk.MediaGarden')
         GLib.set_application_name('MediaGarden')
-        self.lib_storage = lib_storage
 
         css_provider = Gtk.CssProvider()
         css_provider.load_from_string(STYLE_CSS)
@@ -819,12 +814,11 @@ class MyApplication(Gtk.Application):
         #self.set_menubar(builder.get_object('menubar'))
 
     def do_activate(self):
-        window = AppWindow(self.lib_storage, application=self, title='MediaGarden')
+        window = AppWindow(application=self, title='MediaGarden')
         window.present()
 
 
-with LibraryStorage() as lib_storage:
-    app = MyApplication(lib_storage)
-    exit_status = app.run(sys.argv)
+app = MyApplication()
+exit_status = app.run(sys.argv)
 
 sys.exit(exit_status)

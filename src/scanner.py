@@ -1,11 +1,6 @@
 import csv
 import hashlib
 import os
-import sqlite3
-import zipfile
-from io import TextIOWrapper, StringIO
-from pathlib import Path
-from threading import current_thread
 
 STATUS_NEW = 'Новый'
 STATUS_MOVED = 'Переместили'
@@ -52,20 +47,9 @@ class DBStorage:
     def select_tags(self, parent_id=None):
         return Tag.objects.filter(parent_id=parent_id)
 
-    def assign_tag(self, tag_id, file_id):
-        anyfile = AnyFile.objects.filter(pk=file_id).first()
-        if anyfile.tags.filter(pk=tag_id).first():
-            return False
-
-        tag = Tag.objects.filter(pk=tag_id).first()
-        if tag:
-            tag.files.add(anyfile)
-            return True
-
     def __init__(self) -> None:
         self.seq_sql_params = []
         self.duplicates_by_hash = {}
-        self.ident = current_thread().ident
 
     def get_count_pages(self, total_rows_count) -> int:
         count_pages = total_rows_count // self.COUNT_ROWS_ON_PAGE
@@ -125,9 +109,6 @@ class DBStorage:
     def insert_file(self, file_hash, file_id, inserted_file):
         AnyFile(hash=file_hash, pk=file_id, directory=os.path.dirname(inserted_file), filename=os.path.basename(inserted_file))
 
-    def update(self, file_hash, inserted_directory, inserted_filename):
-        AnyFile.objects.filter(hash=file_hash).update(directory=inserted_directory, filename=inserted_filename)
-
 
 class LibraryStorage:
     CSV_COUNT_ROWS_ON_PAGE = 100
@@ -142,28 +123,15 @@ class LibraryStorage:
         """Инициализирует класс сканера хранилища"""
         self.db = DBStorage()
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, _1, _2, _3):
-        pass
-
     def scan_to_db(
             self,
-            process_dublicate,
             progress_count_scanned_files=None,
             progress_current_file=None,
-            func_finished=None,
             func=None,
     ):
         """Сканирует информацию о файлах в директории и заносит её в базу"""
         def process_file_status(inserted_anyfile, existed_anyfile):
             status = self.get_file_status(inserted_anyfile, existed_anyfile)
-            if status != STATUS_NEW:
-                if process_dublicate == 'original':
-                    if status in {STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED}:
-                        self.db.update(inserted_anyfile.hash, inserted_anyfile.directory, inserted_anyfile.filename)
-
             if func:
                 func(status, inserted_anyfile, existed_anyfile)
 
@@ -196,9 +164,6 @@ class LibraryStorage:
         for existed_anyfile in AnyFile.objects.filter(is_deleted=True):
             if func:
                 func(STATUS_DELETED, None, existed_anyfile)
-
-        if func_finished:
-            func_finished()
 
     def export_db(self, exporter_class, progress_count_exported_files=None) -> None:
         """
@@ -257,7 +222,9 @@ class LibraryStorage:
 
         with open(settings.STORAGE_NOTES / 'tags-files.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):
-                self.db.assign_tag(tag_id=csv_row[1], file_id=csv_row[0])
+                anyfile = AnyFile.objects.filter(pk=csv_row[0]).first()
+                tag = Tag.objects.filter(pk=csv_row[1]).first()
+                tag.files.add(anyfile)
 
     def get_file_status(self, inserted_anyfile, existed_anyfile):
         if existed_anyfile is None:
