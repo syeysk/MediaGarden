@@ -32,12 +32,24 @@ label#item-file-title {
 #books_list :selected label {
     color: #000000;
 }
+label#assinged-tag-name {
+    color: grey;
+}
 '''
 
 
 def run_func_in_thread(func, args=(), kwargs=None, finish_func=None, finish_args=()):
     thread = Thread(group=None, target=func, args=args, kwargs=kwargs)
+    thread.daemon = True
     thread.start()
+
+
+# https://pygobject.gnome.org/guide/threading.html
+def idle_add(func):
+    def wrapper(*args, **kwargs):
+        GLib.idle_add(func, *args, **kwargs)
+
+    return wrapper
 
 
 def open_file_with_default_program(file_path):
@@ -226,6 +238,7 @@ class BookListView:
             box.props.margin_end = 6
 
             label = Gtk.Label(label=tag_name)
+            label.set_name('assinged-tag-name')
             button = Gtk.Button(label='x')
             button.connect('clicked', self.delete_tag, book, tag_id)
             
@@ -238,8 +251,7 @@ class BookListView:
 
 
 class TagNameColumnBuilder:
-    def __init__(self, lib_storage):
-        self.lib_storage = lib_storage
+    def __init__(self):
         factory = Gtk.SignalListItemFactory()
         factory.connect('setup', self._on_factory_setup)
         factory.connect('bind', self._on_factory_bind)
@@ -375,7 +387,7 @@ class TagCheckColumnBuilder:
 
 
 class TagCountColumnBuilder:
-    def __init__(self, lib_storage, update_count_funces):
+    def __init__(self, update_count_funces):
         factory = Gtk.SignalListItemFactory()
         factory.connect('setup', self._on_factory_setup)
         factory.connect('bind', self._on_factory_bind)
@@ -384,7 +396,6 @@ class TagCountColumnBuilder:
         self.column = Gtk.ColumnViewColumn(title='Файлов', factory=factory)
         self.column.props.expand = True
         
-        self.lib_storage = lib_storage
         self.update_count_funces = update_count_funces
 
     def _on_factory_setup(self, factory, list_item):
@@ -425,13 +436,13 @@ class TagTreeView:
         self.tag_binded_values = {}
         self.update_count_funces = {}
 
-        column_name_builder = TagNameColumnBuilder(self.lib_storage)
+        column_name_builder = TagNameColumnBuilder()
         self.view.append_column(column_name_builder.column)
 
         column_check_builder = TagCheckColumnBuilder(self.tag_binded_values, func_toggled_tag)
         self.view.append_column(column_check_builder.column)
 
-        column_count_builder = TagCountColumnBuilder(self.lib_storage, self.update_count_funces)
+        column_count_builder = TagCountColumnBuilder(self.update_count_funces)
         self.view.append_column(column_count_builder.column)
 
     def update_tag_count(self, tag_id):
@@ -490,7 +501,7 @@ class TagTreeView:
                 is_found, position = list_store.find(current_tag) # TODO: если ищет методом перебора, то найти решение без перебора
                 list_store.remove(position)
                 current_tag.obj.delete()
-                
+
 
 class ScanWindow(Gtk.ApplicationWindow):
     task_item_widgets = {
@@ -519,9 +530,11 @@ class ScanWindow(Gtk.ApplicationWindow):
 
         run_func_in_thread(self.fg_scan)
 
+    @idle_add
     def progress_count_scanned_files(self, count_scanned_files):
         self.builder.count_scanned_files.props.label = str(count_scanned_files)
-        
+    
+    @idle_add
     def progress_current_file(self, full_path):
         self.builder.current_file.props.label = str(full_path)
 
@@ -555,6 +568,7 @@ class ScanWindow(Gtk.ApplicationWindow):
         except Exception as error:
             print(error)
 
+    @idle_add
     def add_file_task_card(self, status, inserted_anyfile, existed_anyfile):
         if status == STATUS_UNTOUCHED:
             return
@@ -756,8 +770,12 @@ class AppWindow(Gtk.ApplicationWindow):
             self.build_tags(next_parent)
 
     def on_scan(self, action):
+        @idle_add
+        def _update_book_list(*args, **kwargs):
+            self.update_book_list(*args, **kwargs)
+    
         window = ScanWindow(self.lib_storage, transient_for=self, title='Сканирование', modal=True)
-        window.connect('scan_end', self.update_book_list)
+        window.connect('scan_end', _update_book_list)
         window.present()
 
     def on_export(self, action):
