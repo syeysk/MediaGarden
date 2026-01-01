@@ -1,6 +1,5 @@
 import csv
 import hashlib
-import os
 
 STATUS_NEW = 'Новый'
 STATUS_MOVED = 'Переместили'
@@ -47,43 +46,9 @@ class DBStorage:
     def select_tags(self, parent_id=None):
         return Tag.objects.filter(parent_id=parent_id)
 
-    def __init__(self) -> None:
-        self.seq_sql_params = []
-        self.duplicates_by_hash = {}
-
     def get_count_pages(self, total_rows_count) -> int:
         count_pages = total_rows_count // self.COUNT_ROWS_ON_PAGE
         return count_pages + 1 if total_rows_count % self.COUNT_ROWS_ON_PAGE > 0 else count_pages
-
-    def append_row(self, anyfile) -> None:
-        self.seq_sql_params.append(anyfile)
-
-    def is_ready_for_insert(self) -> bool:
-        return len(self.seq_sql_params) == self.COUNT_ROWS_FOR_INSERT
-
-    def insert_rows(self, func=None):
-        """
-        Добавляет список файлов в базу
-        :param func:
-        иначе - возбуждать исключение
-        :return:
-        """
-        # https://docs.djangoproject.com/en/5.2/ref/models/querysets/#bulk-create
-        for inserted_anyfile in self.seq_sql_params:
-            existed_anyfile = AnyFile.objects.filter(hash=inserted_anyfile.hash).first()
-            if existed_anyfile:
-                existed_anyfile.is_deleted = False
-                existed_anyfile.save()
-            else:
-                inserted_anyfile.save()
-
-            if func:
-                func(
-                    inserted_anyfile,
-                    existed_anyfile,
-                )
-
-        self.seq_sql_params.clear()
     
     def _build_queryset(self, tags=None, search=''):
         queryset = AnyFile.objects
@@ -112,12 +77,6 @@ class DBStorage:
 
 class LibraryStorage:
     CSV_COUNT_ROWS_ON_PAGE = 100
-    ARCHIVE_DIFF_FILE_NAME = 'diff.csv'
-    MESSAGE_DOUBLE = 'Обнаружен дубликат по хешу:\n   В базе: {}\n    Дубль: {}'
-    MESSAGE_DOUBLE_IMPORT = (
-        'Обнаружен дубликат файла с отличающимся именем среди порции вставляемых файлов: '
-        '{}\n    В базе:{}'
-    )
 
     def __init__(self) -> None:
         """Инициализирует класс сканера хранилища"""
@@ -130,11 +89,6 @@ class LibraryStorage:
             func=None,
     ):
         """Сканирует информацию о файлах в директории и заносит её в базу"""
-        def process_file_status(inserted_anyfile, existed_anyfile):
-            status = self.get_file_status(inserted_anyfile, existed_anyfile)
-            if func:
-                func(status, inserted_anyfile, existed_anyfile)
-
         AnyFile.objects.update(is_deleted=True)
         os.chdir(settings.STORAGE_BOOKS)
         total_count_files = 0
@@ -152,15 +106,22 @@ class LibraryStorage:
                     progress_current_file(full_path)
 
                 file_hash = get_file_hash(full_path)
-                self.db.append_row(AnyFile(hash=file_hash, directory=directory, filename=filename))
                 total_count_files += 1
                 if progress_count_scanned_files:
                     progress_count_scanned_files(total_count_files)
 
-                if self.db.is_ready_for_insert():
-                    self.db.insert_rows(func=process_file_status)
+                inserted_anyfile = AnyFile(hash=file_hash, directory=directory, filename=filename)
+                existed_anyfile = AnyFile.objects.filter(hash=file_hash).first()
+                if existed_anyfile:
+                    existed_anyfile.is_deleted = False
+                    existed_anyfile.save()
+                else:
+                    inserted_anyfile.save()
 
-        self.db.insert_rows(func=process_file_status)
+                status = self.get_file_status(inserted_anyfile, existed_anyfile)
+                if func:
+                    func(status, inserted_anyfile, existed_anyfile)
+
         for existed_anyfile in AnyFile.objects.filter(is_deleted=True):
             if func:
                 func(STATUS_DELETED, None, existed_anyfile)
