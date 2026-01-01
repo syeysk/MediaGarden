@@ -92,11 +92,11 @@ class Book(GObject.Object):  # TODO: Rename to File
 class Tag(GObject.Object):
     __gtype_name__ = 'Tag'
     
-    def __init__(self, tag_id, name, checked, parent_id=0, level=0):
+    def __init__(self, tag_id, name, parent_id=0, level=0):
         super().__init__()
         self._tag_id = tag_id
         self._name = name
-        self._checked = checked
+        self._checked = False
         self._level = level
         self._parent_id = parent_id
 
@@ -110,7 +110,7 @@ class Tag(GObject.Object):
     def name(self):
         return self._name
 
-    @GObject.Property(type=bool, default=True)
+    @GObject.Property(type=bool, default=False)
     def checked(self):
         return self._checked
 
@@ -347,7 +347,7 @@ class TagNameColumnBuilder:
 
 
 class TagCheckColumnBuilder:
-    def __init__(self, tag_binded_values, func_toggled_tag):
+    def __init__(self, func_toggled_tag):
         factory = Gtk.SignalListItemFactory()
         factory.connect('setup', self._on_factory_setup)
         factory.connect('bind', self._on_factory_bind)
@@ -355,8 +355,6 @@ class TagCheckColumnBuilder:
         factory.connect("teardown", self._on_factory_teardown)        
         self.column = Gtk.ColumnViewColumn(title='', factory=factory)
         self.column.props.fixed_width = 50
-        
-        self.tag_binded_values = tag_binded_values
         self.func_toggled_tag = func_toggled_tag
 
     def _on_factory_setup(self, factory, list_item):
@@ -374,16 +372,15 @@ class TagCheckColumnBuilder:
     def _on_factory_bind(self, factory, list_item):
         cell = list_item.get_child()
         item = list_item.get_item()
-        cell._binding = item.bind_property('checked', cell, 'active', GObject.BindingFlags.SYNC_CREATE)
-        cell.connect('toggled', self.click_tag, item.tag_id, cell)
+        cell._binding = item.bind_property('checked', cell, 'active', GObject.BindingFlags.BIDIRECTIONAL)
+        cell.connect('toggled', self.click_tag, item, item.tag_id, cell)
 
     def _on_factory_teardown(self, factory, list_item):
         cell = list_item.get_child()
         cell._binding = None
 
-    def click_tag(self, _, tag_id, widget):
-        self.tag_binded_values[tag_id] = widget.props.active
-        self.func_toggled_tag(tag_id, self.tag_binded_values)
+    def click_tag(self, _, item, tag_id, widget):
+        self.func_toggled_tag(tag_id, widget.props.active)
 
 
 class TagCountColumnBuilder:
@@ -424,7 +421,7 @@ class TagTreeView:
 
         return None
 
-    def __init__(self, lib_storage, func_toggled_tag):
+    def __init__(self, lib_storage, func_toggled_tag, tag_binded_values):
         self.lib_storage = lib_storage
         self.list_store = Gio.ListStore(item_type=Tag)
         # https://api.pygobject.gnome.org/Gtk-4.0/class-TreeListModel.html
@@ -433,13 +430,13 @@ class TagTreeView:
         self.view = Gtk.ColumnView(model=self.selection)
 
         self.tags = {}
-        self.tag_binded_values = {}
+        self.tag_binded_values = tag_binded_values
         self.update_count_funces = {}
 
         column_name_builder = TagNameColumnBuilder()
         self.view.append_column(column_name_builder.column)
 
-        column_check_builder = TagCheckColumnBuilder(self.tag_binded_values, func_toggled_tag)
+        column_check_builder = TagCheckColumnBuilder(func_toggled_tag)
         self.view.append_column(column_check_builder.column)
 
         column_count_builder = TagCountColumnBuilder(self.update_count_funces)
@@ -448,7 +445,8 @@ class TagTreeView:
     def update_tag_count(self, tag_id):
         self.update_count_funces[tag_id]()
 
-    def append(self, tag_obj, checked, parent_id=None):
+    def append(self, tag_obj):
+        parent_id = tag_obj.parent_id
         if parent_id:
             parent_tag = self.tags[parent_id]
             level = parent_tag.level + 1
@@ -458,11 +456,11 @@ class TagTreeView:
             level = 0
             list_store = self.list_store
 
-        tag = Tag(tag_obj.pk, tag_obj.name, checked, parent_id, level)
+        tag = Tag(tag_obj.pk, tag_obj.name, parent_id, level)
         tag.obj = tag_obj
         list_store.append(tag)
         self.tags[tag_obj.pk] = tag
-        self.tag_binded_values[tag_obj.pk] = tag.checked
+        self.tag_binded_values[tag_obj.pk] = False
 
     def action_new_tag(self, _):
         parent_id = None
@@ -471,7 +469,7 @@ class TagTreeView:
             parent_id = current_tag.parent_id
 
         tag_obj = self.lib_storage.db.insert_tag(self.new_tag_name, parent_id)
-        self.append(tag_obj, False, parent_id)
+        self.append(tag_obj)
 
     def action_new_child_tag(self, _):
         parent_id = None
@@ -480,7 +478,7 @@ class TagTreeView:
             parent_id = current_tag.tag_id
 
         tag_obj = self.lib_storage.db.insert_tag(self.new_tag_name, parent_id)
-        self.append(tag_obj, False, parent_id)
+        self.append(tag_obj)
 
     def action_delete_tag(self, _):
         current_tag = self.selection.get_selected_item()
@@ -727,7 +725,8 @@ class AppWindow(Gtk.ApplicationWindow):
         self.builder.scrolled_tags.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.builder.scrolled_tags.set_propagate_natural_height(True)
         
-        self.tag_tree = TagTreeView(self.lib_storage, self.toggled_tag)
+        self.tag_binded_values = {}
+        self.tag_tree = TagTreeView(self.lib_storage, self.toggled_tag, self.tag_binded_values)
         self.builder.tags.append(self.tag_tree.view)
         self.builder.button_add_tag.connect('clicked', self.tag_tree.action_new_tag)
         self.builder.button_add_child_tag.connect('clicked', self.tag_tree.action_new_child_tag)
@@ -747,8 +746,9 @@ class AppWindow(Gtk.ApplicationWindow):
         
         self.update_book_list()
  
-    def toggled_tag(self, tag_id, all_tags):
-        self.tags = [str(key) for key, value in all_tags.items() if value]
+    def toggled_tag(self, tag_id, is_checked):
+        self.tag_binded_values[tag_id] = is_checked
+        self.tags = [str(key) for key, value in self.tag_binded_values.items() if value]
         self.update_book_list()
  
     def update_book_list(self, _=None):
@@ -763,7 +763,7 @@ class AppWindow(Gtk.ApplicationWindow):
     def build_tags(self, parent_id=None):
         parents = []
         for tag in self.lib_storage.db.select_tags(parent_id):
-            self.tag_tree.append(tag, False, parent_id)
+            self.tag_tree.append(tag)
             parents.append(tag.pk)
 
         for next_parent in parents:
