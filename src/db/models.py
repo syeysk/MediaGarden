@@ -71,9 +71,9 @@ class BaseMedia(models.Model):
 
 
 class Book(BaseMedia):
-    title = models.CharField('Заголовок', blank=True, default='')
-    isbn = models.CharField('ISBN', blank=True, default='')
-    public_year = models.CharField('Год издания', blank=True, default='')
+    title = models.CharField('Заголовок', blank=True, default='', max_length=255)
+    isbn = models.CharField('ISBN', blank=True, default='', max_length=13)
+    public_year = models.IntegerField('Год издания', blank=True, default='')
 
     class Meta:
         verbose_name = 'Книга'
