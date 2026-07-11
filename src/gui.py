@@ -14,6 +14,7 @@ from scanner import (
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
 )
 from exporters import MarkdownExporter
+from utils import open_file_with_default_program
 from django.conf import settings
 
 XML_DIR = settings.BASE_REPO_DIR / 'xml'
@@ -50,21 +51,6 @@ def idle_add(func):
         GLib.idle_add(func, *args, **kwargs)
 
     return wrapper
-
-
-def open_file_with_default_program(file_path):
-    import os
-    import subprocess
-    import platform
-
-    if platform.system() == "Windows":
-        os.startfile(file_path)
-    elif platform.system() == "Darwin":  # macOS
-        subprocess.run(["open", file_path])
-    elif platform.system() == "Linux":
-        subprocess.run(["xdg-open", file_path])
-    else:
-        print(f"Unsupported operating system: {platform.system()}")
 
 
 class Book(GObject.Object):  # TODO: Rename to File

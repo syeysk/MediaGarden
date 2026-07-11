@@ -63,6 +63,13 @@ class DBStorage:
     def select_count(self, tags=None, search=''):
         return self._build_queryset(tags, search).count()
 
+    def select_row(self, index, tags=None, search=''):
+        queryset = self._build_queryset(tags, search).order_by('filename')
+        return queryset[index]
+
+    def select_rows_new(self, tags=None, search=''):
+        return self._build_queryset(tags, search).order_by('filename')
+
     def select_rows(self, tags=None, search=''):
         queryset = self._build_queryset(tags, search).order_by('filename')
         count_pages = self.get_count_pages(queryset.count())
