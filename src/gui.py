@@ -1,11 +1,8 @@
-import json
 import sys
-from pathlib import Path
-from threading import Thread, current_thread
+from threading import Thread
 
 import gi
 gi.require_version("Gdk", "4.0")
-gi.require_version('Gtk', '4.0')
 from gi.repository import GLib, Gio, Gtk, GObject, Gdk
 
 from window_builder import WindowBuilder
