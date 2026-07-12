@@ -41,6 +41,8 @@ class CheckboxDelegate(QStyledItemDelegate):
 class TagsWidget(QWidget):
     tag_status_changed = pyqtSignal()
     new_tag_name = 'новый тег'
+    column_index_name = 0
+    column_index_count = 2
 
     def __init__(self, lib_storage, parent=None):
         super().__init__(parent)
@@ -57,15 +59,16 @@ class TagsWidget(QWidget):
         tree_view.setItemDelegateForColumn(1, self.delegate)
         model = QStandardItemModel()
         model.setHorizontalHeaderLabels(['Тег', '', 'Файлов'])
+        model.dataChanged.connect(self.on_item_changed)
 
         tree_view.setModel(model)
         tree_view.setIndentation(10)
         tree_view.setRootIsDecorated(False)
         tree_view.setStyleSheet('QTreeView::branch {width: 0px; image: none;}')
         header = tree_view.header()
-        header.resizeSection(0, 200)
+        header.resizeSection(self.column_index_name, 200)
         header.resizeSection(1, 20)
-        header.resizeSection(2, 50)
+        header.resizeSection(self.column_index_count, 50)
 
         self.model = model
         self.tree_view = tree_view
@@ -84,12 +87,21 @@ class TagsWidget(QWidget):
         btn_add_child = QPushButton('+>')
         btn_add_child.clicked.connect(self.action_add_child_tag)
         btns_layout.addWidget(btn_add_child)
-        btn_edit = QPushButton('/')
-        btns_layout.addWidget(btn_edit)
         layout.addLayout(btns_layout)
 
         model.rowsInserted.connect(self.activate_buttons)
         self.activate_buttons()
+    
+    def on_item_changed(self, top_left, bottom_right, roles):
+        if top_left.column() == self.column_index_name:
+            item = self.model.itemFromIndex(top_left)
+            new_name = item.text().strip()
+            dj_tag = item.data()
+            if new_name:
+                dj_tag.name = new_name
+                # dj_tag.save()  # TODO: раскомментировать
+            else:
+                item.setText(dj_tag.name)
 
     def activate_buttons(self, parent_index=QModelIndex(), start=0, end=0):
         # Говорим QTreeView открыть живые виджеты для строк
@@ -110,10 +122,12 @@ class TagsWidget(QWidget):
                 QStandardItem(),
                 QStandardItem(str(dj_tag.files.count())),
             ]
-            row[0].setData(dj_tag)
+            row[self.column_index_name].setData(dj_tag)
+            row[1].setEditable(False)
+            row[self.column_index_count].setEditable(False)
             parents.append((dj_tag.pk, row))
             if parent_row:
-                parent_row[0].appendRow(row)
+                parent_row[self.column_index_name].appendRow(row)
             else:
                 self.model.appendRow(row)
 
@@ -139,7 +153,7 @@ class TagsWidget(QWidget):
 
     def action_add_tag(self):
         item, _ = self.get_selected_item()
-        node = [
+        row = [
             QStandardItem(self.new_tag_name),
             QStandardItem(''),
             QStandardItem('0'),
@@ -151,22 +165,24 @@ class TagsWidget(QWidget):
             if parent:
                 parent_tag_id = parent.data().pk
 
-        (parent or self.model).appendRow(node)
+        (parent or self.model).appendRow(row)
         # TODO: раскомментировать
         # dj_tag = self.lib_storage.db.insert_tag(self.new_tag_name, parent_tag_id)
-        # node[0].setData(dj_tag)
+        # row[self.column_index_name].setData(dj_tag)
+        # row[self.column_index_count].setEditable(False)
 
     def action_add_child_tag(self):
         item, _ = self.get_selected_item()
-        node = [
+        row = [
             QStandardItem(self.new_tag_name),
             QStandardItem(''),
             QStandardItem('0'),
         ]
-        (item or self.model).appendRow(node)
+        (item or self.model).appendRow(row)
         # TODO: раскомментировать
         # dj_tag = self.lib_storage.db.insert_tag(self.new_tag_name, item.data().pk if item else None)
-        # node[0].setData(dj_tag)
+        # row[self.column_index_name].setData(dj_tag)
+        # row[self.column_index_count].setEditable(False)
 
     def action_delete_tag(self):
         item, index_row = self.get_selected_item()
@@ -186,7 +202,7 @@ class TagsWidget(QWidget):
                 # self.checked_tags_id.remove(dj_tag.pk)
 
     def on_toggled(self, index, is_checked):
-        index = self.model.index(index.row(), 0, index.parent())
+        index = self.model.index(index.row(), self.column_index_name, index.parent())
         item = self.model.itemFromIndex(index)
         dj_tag = item.data()
         if is_checked:
