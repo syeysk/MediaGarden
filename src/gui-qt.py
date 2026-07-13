@@ -9,11 +9,12 @@ from PyQt6.QtWidgets import (
     QTreeView, QTreeWidgetItem, QListView, QAbstractScrollArea, QStyledItemDelegate
 )
 from PyQt6.QtGui import QIntValidator, QIcon, QStandardItemModel, QStandardItem, QPalette
-from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal, QAbstractListModel
+from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal, QAbstractListModel, QObject, pyqtSlot, QThread
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
 django.setup()
 
+from exporters import CSVExporter, MarkdownExporter
 from scanner import LibraryStorage
 from utils import open_file_with_default_program
 
@@ -399,6 +400,92 @@ class FilesWidgetList(QAbstractScrollArea):
                 widget.hide()
 
 
+class ExportWorker(QObject):
+    finished = pyqtSignal()
+    progress_count_exported_files = pyqtSignal(int, int, int)
+
+    def __init__(self, lib_storage, exporter):
+        super().__init__()
+        self.lib_storage = lib_storage
+        self.exporter = exporter
+
+    @pyqtSlot()
+    def run_task(self):
+        try:
+            self.lib_storage.export_db(
+                self.exporter,
+                self.progress_count_exported_files.emit,
+            )
+        except Exception as error:
+            print(error)
+
+        self.finished.emit()
+
+
+class ExportWindow(QDialog):
+    def __init__(self, lib_storage: LibraryStorage, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Export')
+        self.lib_storage = lib_storage
+
+        layout = QVBoxLayout(self)
+
+        TITLE_MARKDOWN = 'Markdown'
+        TITLE_CSV = 'CSV'
+
+        self.field_export_type = QComboBox()
+        self.field_export_type.addItem(TITLE_MARKDOWN, MarkdownExporter)
+        self.field_export_type.addItem(TITLE_CSV, CSVExporter)
+        self.field_export_type.setCurrentText(TITLE_MARKDOWN)
+        title_export_type = QLabel('Экспортировать как:')
+        layout_export_type = QHBoxLayout()
+        layout_export_type.addWidget(title_export_type)
+        layout_export_type.addWidget(self.field_export_type)
+        layout.addLayout(layout_export_type)
+
+        layout_index_of_current_row = QHBoxLayout()
+        layout_count_rows = QHBoxLayout()
+        layout_current_page = QHBoxLayout()
+        layout.addLayout(layout_count_rows)
+        layout.addLayout(layout_index_of_current_row)
+        layout.addLayout(layout_current_page)
+
+        title_count_rows = QLabel('Всего книг:')
+        title_index_of_current_row = QLabel('Экспортировано книг:')
+        title_current_page = QLabel('Создано страниц-заметок:')
+
+        self.lbl_count_rows = QLabel('-')
+        self.lbl_index_of_current_row = QLabel('-')
+        self.lbl_current_page = QLabel('-')
+        layout_count_rows.addWidget(title_count_rows)
+        layout_count_rows.addWidget(self.lbl_count_rows)
+        layout_index_of_current_row.addWidget(title_index_of_current_row)
+        layout_index_of_current_row.addWidget(self.lbl_index_of_current_row)
+        layout_current_page.addWidget(title_current_page)
+        layout_current_page.addWidget(self.lbl_current_page)
+
+        btn_start = QPushButton('Начать экспорт')
+        btn_start.clicked.connect(self.start_export)
+        layout.addWidget(btn_start)
+
+    def start_export(self):
+        self.worker = ExportWorker(self.lib_storage, self.field_export_type.currentData())
+        self.worker.progress_count_exported_files.connect(self.progress_count_exported_files)
+
+        self.thread = QThread()
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run_task)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def progress_count_exported_files(self, index_of_current_row: int, count_rows: int, current_page: int):
+        self.lbl_index_of_current_row.setText(str(index_of_current_row))
+        self.lbl_count_rows.setText(str(count_rows))
+        self.lbl_current_page.setText(str(current_page))        
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -428,8 +515,10 @@ class MainWindow(QMainWindow):
         left_layout.addSpacing(15)
 
         btn_export = QPushButton('Экспортировать в заметки')
+        btn_export.clicked.connect(self.on_click_export)
         left_layout.addWidget(btn_export)
         btn_import = QPushButton('Импортировать из заметок')
+        btn_import.setDisabled(True)
         left_layout.addWidget(btn_import)
 
         left_layout.addSpacing(15)
@@ -475,6 +564,10 @@ class MainWindow(QMainWindow):
         )
         self.lbl_search_count.setText(str(queryset.count()))
         self.files_widget.set_data(queryset)
+    
+    def on_click_export(self):
+        window = ExportWindow(self.lib_storage)
+        window.exec()
     
 
 if __name__ == '__main__':
