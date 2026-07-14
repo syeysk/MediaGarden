@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QDialogButtonBox, QAbstractItemView, QComboBox, QScrollArea, QCheckBox, QTextEdit,
     QTreeView, QTreeWidgetItem, QListView, QAbstractScrollArea, QStyledItemDelegate
 )
-from PyQt6.QtGui import QIntValidator, QIcon, QStandardItemModel, QStandardItem, QPalette
+from PyQt6.QtGui import QIntValidator, QIcon, QStandardItemModel, QStandardItem, QPalette, QColor
 from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal, QAbstractListModel, QObject, pyqtSlot, QThread
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
@@ -283,6 +283,13 @@ class FileCardWidget(QWidget):
 
         layout = QVBoxLayout(self)
         # self.setStyleSheet('QVBoxLayout {border: 1px solid white;}')
+        # self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        # self.setStyleSheet('background-color: white;')
+
+        # palette = self.palette()
+        # palette.setColor(QPalette.ColorRole.Base, QColor('blue'))
+        # self.setPalette(palette)
+        # self.setAutoFillBackground(True)
 
         data_layout = QHBoxLayout()
         self.lbl_filename = QLabel()
@@ -391,7 +398,7 @@ class FilesWidgetList(QAbstractScrollArea):
         # Создаем минимально необходимое количество виджетов
         for _ in range(max(20, visible_count)): # Минимум 20 для запаса при ресайзе
             w = FileCardWidget(self.viewport_container)
-            w.tag_unassigned.connect(self.tag_unassigned)
+            w.tag_unassigned.connect(self.on_tag_unassigned)
             w.show()
             self.visible_widgets.append(w)
             
@@ -402,9 +409,8 @@ class FilesWidgetList(QAbstractScrollArea):
         
         self.update_widgets_position()
     
-    def tag_unassigned(self, dj_tag):
-        self.tag_count_changed.emit(dj_tag)
-        
+    def on_tag_unassigned(self, dj_tag):
+        self.tag_count_changed.emit(dj_tag)        
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -464,6 +470,27 @@ class ExportWorker(QObject):
                 self.exporter,
                 self.progress_count_exported_files.emit,
             )
+        except Exception as error:
+            print(error)
+
+        self.finished.emit()
+
+
+class ImportWorker(QObject):
+    finished = pyqtSignal()
+    progress_count_imported_files = pyqtSignal(int)
+
+    def __init__(self, lib_storage):
+        super().__init__()
+        self.lib_storage = lib_storage
+
+    @pyqtSlot()
+    def run_task(self):
+        try:
+            self.lib_storage.import_csv_to_db(
+                self.progress_count_imported_files.emit,
+            )
+            print('Импорт завершён')
         except Exception as error:
             print(error)
 
@@ -534,6 +561,44 @@ class ExportWindow(QDialog):
         self.lbl_current_page.setText(str(current_page))        
 
 
+class ImportWindow(QDialog):
+    finished = pyqtSignal()
+
+    def __init__(self, lib_storage: LibraryStorage, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Import')
+        self.lib_storage = lib_storage
+
+        layout = QVBoxLayout(self)
+
+        layout_progress = QHBoxLayout()
+        self.lbl_index_current_row = QLabel('-')
+        layout_progress.addWidget(QLabel('Импортировано книг:'))
+        layout_progress.addWidget(self.lbl_index_current_row)
+
+        layout.addLayout(layout_progress)
+
+        btn_start = QPushButton('Начать импорт')
+        btn_start.clicked.connect(self.start_import)
+        layout.addWidget(btn_start)
+
+    def progress_count_imported_files(self, index_of_current_row: int):
+        self.lbl_index_current_row.setText(str(index_of_current_row))
+
+    def start_import(self):
+        self.worker = ImportWorker(self.lib_storage)
+        self.worker.progress_count_imported_files.connect(self.progress_count_imported_files)
+        self.worker.finished.connect(self.finished.emit)
+
+        self.thread = QThread()
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run_task)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -565,8 +630,8 @@ class MainWindow(QMainWindow):
         btn_export = QPushButton('Экспортировать в заметки')
         btn_export.clicked.connect(self.on_click_export)
         left_layout.addWidget(btn_export)
-        btn_import = QPushButton('Импортировать из заметок')
-        btn_import.setDisabled(True)
+        btn_import = QPushButton('Импортировать из CSV')
+        btn_import.clicked.connect(self.on_click_import)
         left_layout.addWidget(btn_import)
 
         left_layout.addSpacing(15)
@@ -621,6 +686,15 @@ class MainWindow(QMainWindow):
     def on_click_export(self):
         window = ExportWindow(self.lib_storage)
         window.exec()
+    
+    def on_click_import(self):
+        window = ImportWindow(self.lib_storage)
+        window.finished.connect(self.on_finished_import)
+        window.exec()
+    
+    def on_finished_import(self):
+        self.tags_widget.build_tags()
+        self.update_books_list()
     
 
 if __name__ == '__main__':
