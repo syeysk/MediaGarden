@@ -1,5 +1,6 @@
 import os
 import sys
+from struct import pack, unpack
 
 import django
 from PyQt6.QtWidgets import (
@@ -8,8 +9,8 @@ from PyQt6.QtWidgets import (
     QLineEdit, QDialogButtonBox, QAbstractItemView, QComboBox, QScrollArea, QCheckBox, QTextEdit,
     QTreeView, QTreeWidgetItem, QListView, QAbstractScrollArea, QStyledItemDelegate
 )
-from PyQt6.QtGui import QIntValidator, QIcon, QStandardItemModel, QStandardItem, QPalette, QColor
-from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal, QAbstractListModel, QObject, pyqtSlot, QThread
+from PyQt6.QtGui import QIntValidator, QIcon, QStandardItemModel, QStandardItem, QPalette, QColor, QDrag
+from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal, QAbstractListModel, QObject, pyqtSlot, QThread, QMimeData, QByteArray, QDataStream, QIODevice
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
 django.setup()
@@ -18,7 +19,39 @@ from exporters import CSVExporter, MarkdownExporter
 from scanner import LibraryStorage
 from utils import open_file_with_default_program
 
+from db.models import Tag
 from django.conf import settings
+
+class DragableLabel(QLabel):
+    def __init__(self, dj_tag, *args, **kwargs):
+        super().__init__(dj_tag.name, *args, **kwargs)
+        self.dj_tag = dj_tag
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() != Qt.MouseButton.LeftButton:
+            return
+        
+        mime_data = QMimeData()
+        mime_data.setData('application/x-tag-id', pack('I', self.dj_tag.pk))
+
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.exec(Qt.DropAction.MoveAction)
+
+
+class TagNameDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def createEditor(self, parent, option, index):
+        model = index.model()
+        item = model.itemFromIndex(index)
+        dj_tag = item.data()
+        lbl_title = DragableLabel(dj_tag, parent=parent)
+        return lbl_title
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
 
 
 class CheckboxDelegate(QStyledItemDelegate):
@@ -43,6 +76,7 @@ class TagsWidget(QWidget):
     tag_status_changed = pyqtSignal()
     new_tag_name = 'новый тег'
     column_index_name = 0
+    column_index_checkbox = 1
     column_index_count = 2
 
     def __init__(self, lib_storage, parent=None):
@@ -53,11 +87,13 @@ class TagsWidget(QWidget):
         self.checked_tags_id = set()
 
         # Tags tree
-
         tree_view = QTreeView()
-        self.delegate = CheckboxDelegate(tree_view)
-        self.delegate.toggled.connect(self.on_toggled)
-        tree_view.setItemDelegateForColumn(1, self.delegate)
+        delegate_name = TagNameDelegate(tree_view)
+        tree_view.setItemDelegateForColumn(self.column_index_name, delegate_name)
+        delegate_checkbox = CheckboxDelegate(tree_view)
+        delegate_checkbox.toggled.connect(self.on_toggled)
+        tree_view.setItemDelegateForColumn(self.column_index_checkbox, delegate_checkbox)
+
         model = QStandardItemModel()
         model.setHorizontalHeaderLabels(['Тег', '', 'Файлов'])
         model.dataChanged.connect(self.on_item_changed)
@@ -68,7 +104,7 @@ class TagsWidget(QWidget):
         tree_view.setStyleSheet('QTreeView::branch {width: 0px; image: none;}')
         header = tree_view.header()
         header.resizeSection(self.column_index_name, 200)
-        header.resizeSection(1, 20)
+        header.resizeSection(self.column_index_checkbox, 20)
         header.resizeSection(self.column_index_count, 50)
 
         self.model = model
@@ -109,22 +145,24 @@ class TagsWidget(QWidget):
         # Благодаря виртуализации Qt, они будут создаваться только для того, что на экране
         model = self.model
         for row in range(model.rowCount(parent_index)):
-            idx = model.index(row, 1, parent_index)
-            self.tree_view.openPersistentEditor(idx)
+            index_checkbox = model.index(row, self.column_index_checkbox, parent_index)
+            self.tree_view.openPersistentEditor(index_checkbox)
+            index_name = model.index(row, self.column_index_name, parent_index)
+            self.tree_view.openPersistentEditor(index_name)
             # Рекурсивно для вложенных строк, если они развернуты
-            if model.hasChildren(idx):
-                self.activate_buttons(idx)
+            if model.hasChildren(index_checkbox):
+                self.activate_buttons(index_checkbox)
 
     def build_tags(self, parent_id=None, parent_row=None):
         parents = []
         for dj_tag in self.lib_storage.db.select_tags(parent_id):
             row = [
-                QStandardItem(dj_tag.name),
+                QStandardItem(),
                 QStandardItem(),
                 QStandardItem(str(dj_tag.files.count())),
             ]
             row[self.column_index_name].setData(dj_tag)
-            row[1].setEditable(False)
+            row[self.column_index_checkbox].setEditable(False)
             row[self.column_index_count].setEditable(False)
             parents.append((dj_tag.pk, row))
             if parent_row:
@@ -142,12 +180,12 @@ class TagsWidget(QWidget):
     
     def on_changed_count(self, dj_tag):
         row = self.rows[dj_tag.pk]
-        row[2].setText(str(dj_tag.files.count()))
+        row[self.column_index_count].setText(str(dj_tag.files.count()))
 
     def get_selected_item(self) -> tuple[QStandardItem, int] | tuple[None, None]:
         indexes = self.tree_view.selectedIndexes()
         if indexes:
-            index = indexes[0]
+            index = indexes[self.column_index_name]
             return self.model.itemFromIndex(index), index.row()
 
         return None, None
@@ -156,7 +194,7 @@ class TagsWidget(QWidget):
         item, _ = self.get_selected_item()
         row = [
             QStandardItem(self.new_tag_name),
-            QStandardItem(''),
+            QStandardItem(),
             QStandardItem('0'),
         ]
         parent = None
@@ -176,7 +214,7 @@ class TagsWidget(QWidget):
         item, _ = self.get_selected_item()
         row = [
             QStandardItem(self.new_tag_name),
-            QStandardItem(''),
+            QStandardItem(),
             QStandardItem('0'),
         ]
         (item or self.model).appendRow(row)
@@ -277,6 +315,7 @@ class TagWidget(QWidget):
 
 class FileCardWidget(QWidget):
     tag_unassigned = pyqtSignal(object)
+    tag_assigned = pyqtSignal(object)
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -321,6 +360,30 @@ class FileCardWidget(QWidget):
         self.dj_file = None
         # layout.double_clicked.connect(self.on_click)
 
+        self.setAcceptDrops(True)
+    
+    def dragEnterEvent(self, event):
+        mime_data: QMimeData = event.mimeData()
+        data: bytearray = mime_data.data('application/x-tag-id')
+        if data:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        mime_data: QMimeData = event.mimeData()
+        data: bytearray = mime_data.data('application/x-tag-id')
+        if data:
+            tag_pk = unpack('I', data)[0]
+            dj_tag = Tag(pk=tag_pk)
+            dj_tag.refresh_from_db()
+            self.dj_file.tags.add(dj_tag)
+            self.update_data(self.dj_file)
+            self.tag_assigned.emit(dj_tag)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             window = FileWindow(self.dj_file)
@@ -349,7 +412,7 @@ class FileCardWidget(QWidget):
                 self.widgets.append(tag_widget)
 
     def unassign_tag_from_file(self, dj_tag):
-        #self.dj_file.tags.remove(self.dj_tag)  # TODO: раскомментировать
+        self.dj_file.tags.remove(dj_tag)  # TODO: раскомментировать
         self.update_data(self.dj_file)
         self.tag_unassigned.emit(dj_tag)
     
@@ -399,6 +462,7 @@ class FilesWidgetList(QAbstractScrollArea):
         for _ in range(max(20, visible_count)): # Минимум 20 для запаса при ресайзе
             w = FileCardWidget(self.viewport_container)
             w.tag_unassigned.connect(self.on_tag_unassigned)
+            w.tag_assigned.connect(self.on_tag_assigned)
             w.show()
             self.visible_widgets.append(w)
             
@@ -410,7 +474,10 @@ class FilesWidgetList(QAbstractScrollArea):
         self.update_widgets_position()
     
     def on_tag_unassigned(self, dj_tag):
-        self.tag_count_changed.emit(dj_tag)        
+        self.tag_count_changed.emit(dj_tag)
+
+    def on_tag_assigned(self, dj_tag):
+        self.tag_count_changed.emit(dj_tag)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
