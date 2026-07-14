@@ -585,15 +585,20 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right_panel)
 
         top_layout = QHBoxLayout()
-        self.field_search = QLineEdit()
-        self.field_search.textChanged.connect(self.update_books_list)
-        top_layout.addWidget(self.field_search)
+        btn_clear = QPushButton('x')
         btn_search = QPushButton('Найти')
-        btn_search.clicked.connect(self.update_books_list)
-        top_layout.addWidget(btn_search)
+        self.field_search = QLineEdit()
         lbl_search_title = QLabel('Найдено: ')
-        top_layout.addWidget(lbl_search_title)
         self.lbl_search_count = QLabel()
+
+        self.field_search.textChanged.connect(self.update_books_list)
+        btn_clear.clicked.connect(lambda: self.field_search.setText(''))
+        btn_search.clicked.connect(self.update_books_list)
+
+        top_layout.addWidget(btn_clear)
+        top_layout.addWidget(self.field_search)
+        top_layout.addWidget(btn_search)
+        top_layout.addWidget(lbl_search_title)
         top_layout.addWidget(self.lbl_search_count)
         top_layout.addStretch()
 
