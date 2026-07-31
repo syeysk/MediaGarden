@@ -1,5 +1,12 @@
 import csv
 import hashlib
+import os
+
+from django.conf import settings
+# from django.db.models import Q, Count
+
+from common.models import Tag
+from mediagarden.models import AnyFile
 
 STATUS_NEW = 'Новый'
 STATUS_MOVED = 'Переместили'
@@ -9,17 +16,6 @@ STATUS_UNTOUCHED = 'Не тронут'
 STATUS_DELETED = 'Удалён'
 STATUS_DUPLICATE = 'Дубликат'
 LIBRARY_IGNORE_EXTENSIONS = ['db', 'db-journal']
-
-
-import os
-import django
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings') 
-django.setup()
-
-from django.conf import settings
-from django.db.models import Q, Count
-from db.models import AnyFile, Tag
 
 
 def get_file_hash(file_path):
@@ -38,27 +34,9 @@ class DBStorage:
     COUNT_ROWS_FOR_INSERT = 30
     COUNT_ROWS_ON_PAGE = 30
 
-    def insert_tag(self, name, parent_id=None):
-        tag = Tag(name=name, parent_id=parent_id)
-        tag.save()
-        return tag
-
-    def select_tags(self, parent_id=None):
-        return Tag.objects.filter(parent_id=parent_id)
-
     def get_count_pages(self, total_rows_count) -> int:
         count_pages = total_rows_count // self.COUNT_ROWS_ON_PAGE
         return count_pages + 1 if total_rows_count % self.COUNT_ROWS_ON_PAGE > 0 else count_pages
-    
-    def _build_queryset(self, tags=None, search=''):
-        queryset = AnyFile.objects
-        if search:
-            queryset = queryset.filter(Q(directory__contains=search) | Q(filename__contains=search))
-        
-        if tags:
-            queryset = queryset.filter(tags__pk__in=tags).annotate(Count('pk'))
-
-        return queryset
 
     def select_count(self, tags=None, search=''):
         return self._build_queryset(tags, search).count()
@@ -66,9 +44,6 @@ class DBStorage:
     def select_row(self, index, tags=None, search=''):
         queryset = self._build_queryset(tags, search).order_by('filename')
         return queryset[index]
-
-    def select_rows_new(self, tags=None, search=''):
-        return self._build_queryset(tags, search).order_by('filename')
 
     def select_rows(self, tags=None, search=''):
         queryset = self._build_queryset(tags, search).order_by('filename')
@@ -164,7 +139,7 @@ class LibraryStorage:
 
         with open(os.path.join(exporter.storage_structure, 'tags.csv'), 'w', encoding='utf-8', newline='\n') as csv_file:
             csv_writer = csv.writer(csv_file)
-            for row in Tag.objects.values_list('pk', 'name', 'parent_id'):
+            for row in Tag.objects.values_list('pk', 'code', 'name', 'parent_id'):
                 csv_writer.writerow(row)
 
         with open(os.path.join(exporter.storage_structure, 'tags-files.csv'), 'w', encoding='utf-8', newline='\n') as csv_file:
@@ -186,7 +161,7 @@ class LibraryStorage:
 
         with open(settings.STORAGE_NOTES / 'tags.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):
-                Tag.objects.create(pk=csv_row[0], name=csv_row[1], parent_id=csv_row[2])
+                Tag.objects.create(pk=csv_row[0], name=csv_row[1], parent_id=csv_row[2], code=csv_row[3])
 
         with open(settings.STORAGE_NOTES / 'tags-files.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
             for csv_row in csv.reader(csv_file):

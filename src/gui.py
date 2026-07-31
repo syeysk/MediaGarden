@@ -528,7 +528,6 @@ class ScanWindow(Gtk.ApplicationWindow):
 
     def action_delete_duplicate_from_base(self, _, builder, inserted_anyfile, existed_anyfile):
         try:
-            import os.path
             existed_anyfile.abspath.unlink()
             existed_anyfile.update_path(inserted_anyfile.directory, inserted_anyfile.filename)
             builder.button_inserted.props.sensitive = False
