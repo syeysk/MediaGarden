@@ -30,7 +30,7 @@ class TagWidget(QWidget):
 
 
 class FileCardWidget(TaggedWidget):
-    double_clicked = pyqtSignal(object)
+    signal_open_entity = pyqtSignal(object)
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -76,7 +76,7 @@ class FileCardWidget(TaggedWidget):
     
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.double_clicked.emit(self.dj_entity)
+            self.signal_open_entity.emit(self.dj_entity)
         
         super().mouseDoubleClickEvent(event)
 
@@ -110,7 +110,9 @@ class FileCardWidget(TaggedWidget):
 # TODO: Почитать, чем это лучше QListView? Возможно, переделать на QListView
 class FilesList(QAbstractScrollArea):
     tag_count_changed = pyqtSignal(object)
-    double_clicked = pyqtSignal(object)
+    signal_open_entity = pyqtSignal(object)
+    signal_add_entity = pyqtSignal()
+    signal_delete_entity = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -129,10 +131,10 @@ class FilesList(QAbstractScrollArea):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.verticalScrollBar().valueChanged.connect(self.update_widgets_position)
 
-    def on_double_clicked(self, dj_entity):
-        self.double_clicked.emit(dj_entity)
+    def on_open_entity(self, dj_entity):
+        self.signal_open_entity.emit(dj_entity)
 
-    def set_data(self, queryset):
+    def set_model(self, _, queryset):
         """Загрузка данных в список"""
         self.queryset = queryset
         
@@ -152,7 +154,7 @@ class FilesList(QAbstractScrollArea):
             w = FileCardWidget(self.viewport_container)
             w.tag_unassigned.connect(self.on_tag_unassigned)
             w.tag_assigned.connect(self.on_tag_assigned)
-            w.double_clicked.connect(self.on_double_clicked)
+            w.signal_open_entity.connect(self.on_open_entity)
             w.show()
             self.visible_widgets.append(w)
             
@@ -175,7 +177,7 @@ class FilesList(QAbstractScrollArea):
         # Пересчитываем размеры контейнера при изменении окна
         self.viewport_container.setGeometry(0, 0, self.viewport().width(), total_count * self.row_height)
         if total_count:
-            self.set_data(self.queryset) # Пересоздаем виджеты под новый размер экрана
+            self.set_model(None, self.queryset) # Пересоздаем виджеты под новый размер экрана
 
     def update_widgets_position(self):
         """Магия переиспользования: двигает виджеты и меняет в них текст"""

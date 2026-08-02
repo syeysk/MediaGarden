@@ -5,20 +5,20 @@ from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal
 
 
 class DjangoTableModel(QAbstractTableModel):
-    def __init__(self, django_model, field_names, queryset=None, func_get_value=None):
+    def __init__(self, dj_model, field_names, queryset=None, func_get_value=None):
         super().__init__()
-        self.django_model = django_model
+        self.dj_model = dj_model
         self.field_names = field_names
         self._headers = []
         self._data = []
         self.entities = []
-        self.queryset = django_model.objects if queryset is None else queryset 
+        self.queryset = dj_model.objects if queryset is None else queryset 
         self.func_get_value = func_get_value
         for name in field_names:
             if name == 'id':
                 self._headers.append('ID')
             else:
-                self._headers.append(django_model._meta.get_field(name).verbose_name.capitalize())
+                self._headers.append(dj_model._meta.get_field(name).verbose_name.capitalize())
 
         self.refresh()
 
@@ -32,7 +32,7 @@ class DjangoTableModel(QAbstractTableModel):
             row = []
             for name in self.field_names:
                 value = getattr(entity, name)
-                dj_field = self.django_model._meta.get_field(name)
+                dj_field = self.dj_model._meta.get_field(name)
                 if dj_field.choices:
                     value = dict(dj_field.choices).get(value)
 
@@ -62,17 +62,18 @@ class DjangoTableModel(QAbstractTableModel):
 
 
 class EntitiesList(QWidget):
-    added_entity = pyqtSignal(object)
+    tag_count_changed = pyqtSignal(object)
+    signal_open_entity = pyqtSignal(object)
+    signal_add_entity = pyqtSignal()
+    signal_delete_entity = pyqtSignal(object)
 
-    def __init__(self, func_click_on_entity=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
         self.table = QTableView()
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.func_click_on_entity = func_click_on_entity
         self.table.doubleClicked.connect(self.open_edit_dialog)
-        self.gui_model = None
 
         self.title_label = QLabel()
         self.title_label.setStyleSheet('font-size: 20px; font-weight: bold;')
@@ -90,30 +91,24 @@ class EntitiesList(QWidget):
         layout.addWidget(self.table)
         # layout.addWidget(btn_add, alignment=Qt.AlignmentFlag.AlignHCenter)
     
+    def refresh(self):
+        self.table.model().refresh()
+    
     def open_edit_dialog(self, index):
-        def default_open_edit_dialog(entity):
-            if self.gui_model(entity).exec() == QDialog.DialogCode.Accepted:
-                self.table.model().refresh()
-
         entity = self.table.model().entities[index.row()]
-        (self.func_click_on_entity or default_open_edit_dialog)(entity)
+        self.signal_open_entity.emit(entity)
 
     def open_add_dialog(self):
-        gui_model = self.gui_model()
-        if gui_model.exec() == QDialog.DialogCode.Accepted:
-            self.added_entity.emit(gui_model.entity)
-            self.table.model().refresh()
+        self.signal_add_entity.emit()
 
     def open_delete_dialog(self, _):
         index = self.table.currentIndex()
         index_row = index.row()
         if index_row > -1:
             entity = self.table.model().entities[index.row()]
-            entity.delete()
-            self.table.model().refresh()
+            self.signal_delete_entity.emit(entity)
 
     def set_model(self, gui_model, *args):
-        self.gui_model = gui_model
         model = DjangoTableModel(gui_model.dj_model, gui_model.table_fields, *args)
         self.title_label.setText(str(gui_model.dj_model._meta.verbose_name_plural))
         self.table.setModel(model)

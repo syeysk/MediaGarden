@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QHBoxLayout, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel
 )
 
-from common.gui_entities_list import EntitiesList
+# from common.gui_entities_list import EntitiesList
 from common.gui_entity_types import EntityTypesWidget
 from common.gui_tags import TagsWidget
 
@@ -18,10 +18,6 @@ class MainWindow(QMainWindow):
 
         self.central_widget = QSplitter()
         self.setCentralWidget(self.central_widget)
-
-        # central_widget = QWidget()
-        # self.setCentralWidget(central_widget)
-        # self.central_widget = QHBoxLayout(central_widget)
 
         # Левая панель
 
@@ -103,31 +99,48 @@ class MainWindow(QMainWindow):
             self.field_search.text(),
         )
         self.lbl_search_count.setText(str(queryset.count()))
-        if self.current_gui_model.table_class:
-            self.table_widget.set_data(queryset)
-        else:
-            self.table_widget.set_model(self.current_gui_model, queryset)
+        self.table_widget.set_model(self.current_gui_model, queryset)
 
     def change_table(self, gui_model):
         self.current_gui_model = gui_model
-
         if self.table_widget:
             self.table_holder.removeWidget(self.table_widget)
             self.table_widget.deleteLater()
 
-        table_class = gui_model.table_class
-        if table_class:
-            self.table_widget = table_class(self)
-            self.table_widget.tag_count_changed.connect(self.tags_widget.on_changed_count)
-            self.table_widget.double_clicked.connect(self.on_item_clicked)
-        else:
-            self.table_widget = EntitiesList()
-
+        self.table_widget = gui_model.table_class()
+        self.table_widget.tag_count_changed.connect(self.tags_widget.on_changed_count)
+        self.table_widget.signal_open_entity.connect(self.on_open_entity)
+        self.table_widget.signal_delete_entity.connect(self.on_delete_entity)
+        self.table_widget.signal_add_entity.connect(self.on_add_entity)
         self.table_holder.addWidget(self.table_widget, stretch=1)
         self.update_table()
         self.update_tags()
         self.update_actions()
 
-    def on_item_clicked(self, dj_entity):
-        window = self.current_gui_model.window_class(dj_entity)
+    def on_open_entity(self, dj_entity):
+        window = self.current_gui_model.window_class(self.current_gui_model.dj_model, dj_entity)
+
+        def on_saved_entity():
+            self.table_widget.refresh()
+
+        window.signal_saved_entity.connect(on_saved_entity)
         window.exec()
+
+    def on_add_entity(self):
+        window = self.current_gui_model.window_class(self.current_gui_model.dj_model)
+
+        def on_created_entity(dj_entity):
+            self.entity = dj_entity
+            self.table_widget.refresh()
+
+        def on_saved_entity():
+            self.table_widget.refresh()
+
+        window.signal_created_entity.connect(on_created_entity)
+        window.signal_saved_entity.connect(on_saved_entity)
+
+        window.exec()
+
+    def on_delete_entity(self, dj_entity):
+        dj_entity.remove()
+        self.table_widget.refresh()
