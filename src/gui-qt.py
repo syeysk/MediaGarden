@@ -1,6 +1,5 @@
 import os
 import sys
-from struct import unpack
 
 import django
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QDialog
@@ -10,12 +9,8 @@ from PyQt6.QtCore import Qt, QModelIndex, QAbstractListModel
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
 django.setup()
 
-from mediagarden.gui_entities_list import FilesList
-from mediagarden.gui_entity_windows import FileWindow
-from common.gui_entity import GUIEntity
 from common.gui_main_window import MainWindow
-from mediagarden.gui_actions import ActionsAnyFileWidget
-from mediagarden.models import AnyFile
+from mediagarden.gui_entity_windows import GUIAnyFile
 from scanner import (
     STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
@@ -161,15 +156,6 @@ class ScanTaskUntouchedWidget(QWidget):
 
 class ScanTaskItem(QWidget):
     pass
-
-
-class GUIAnyFile(GUIEntity):
-    dj_model = AnyFile
-    actions_class = ActionsAnyFileWidget
-    field_order = 'filename'
-    fields_search = ['directory', 'filename']
-    table_class = FilesList
-    window_class = FileWindow
 
 
 class MainWindow(MainWindow):

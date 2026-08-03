@@ -3,6 +3,11 @@ from PyQt6.QtCore import pyqtSignal
 
 from utils import open_file_with_default_program
 
+from mediagarden.gui_entities_list import FilesList
+from common.gui_entity import GUIEntity
+from mediagarden.gui_actions import ActionsAnyFileWidget
+from mediagarden.models import AnyFile
+
 
 class FileWindow(QDialog):
     signal_saved_entity = pyqtSignal()
@@ -45,3 +50,12 @@ class FileWindow(QDialog):
 
             self.btn_open_note.setEnabled(True)
             self.btn_create_note.setEnabled(False)
+
+
+class GUIAnyFile(GUIEntity):
+    dj_model = AnyFile
+    actions_class = ActionsAnyFileWidget
+    field_order = 'filename'
+    fields_search = ['directory', 'filename']
+    table_class = FilesList
+    window_class = FileWindow
