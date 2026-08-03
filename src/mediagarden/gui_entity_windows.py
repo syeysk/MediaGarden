@@ -1,10 +1,14 @@
 from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QLabel, QDialog
+from PyQt6.QtCore import pyqtSignal
 
 from utils import open_file_with_default_program
 
 
 class FileWindow(QDialog):
-    def __init__(self, dj_file, parent=None):
+    signal_saved_entity = pyqtSignal()
+    signal_created_entity = pyqtSignal(object)
+
+    def __init__(self, dj_model, dj_file, parent=None):
         super().__init__(parent)
         self.setWindowTitle('File details')
         self.dj_file = dj_file

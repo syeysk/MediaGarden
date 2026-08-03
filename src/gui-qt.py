@@ -165,21 +165,11 @@ class ScanTaskItem(QWidget):
 
 class GUIAnyFile(GUIEntity):
     dj_model = AnyFile
-    # table_fields = ['filename', 'hash']
     actions_class = ActionsAnyFileWidget
     field_order = 'filename'
     fields_search = ['directory', 'filename']
     table_class = FilesList
     window_class = FileWindow
-
-    # def build_form(self):
-    #     layout = QVBoxLayout()
-    #     field_names = ['directory', 'filename', 'hash']
-    #     for field_name in field_names:
-    #         layout_line = self.build_row(field_name)
-    #         layout.addLayout(layout_line)
-
-    #     return layout
 
 
 class MainWindow(MainWindow):
