@@ -10,7 +10,7 @@ from mediagarden.scanner import (
     LibraryStorage, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
 )
-from exporters import MarkdownExporter
+from mediagarden.exporters import MarkdownExporter
 from utils import open_file_with_default_program
 from django.conf import settings
 

@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from pyfakefs.fake_filesystem_unittest import TestCase
 
-from src.exporters import CSVExporter
+from mediagarden.exporters import CSVExporter
 from mediagarden.scanner import DBStorage, LibraryStorage, STATUS_DUPLICATE
 from tests.library_storage_fabric import LibraryStorageFabric
 

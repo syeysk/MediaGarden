@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QStandardItemModel, QStandardItem, QDrag, QPainter, QPalette
 from PyQt6.QtCore import Qt, QModelIndex, pyqtSignal, QMimeData, QThread, pyqtSlot, QObject
 
-from exporters import CSVExporter, MarkdownExporter
+from mediagarden.exporters import CSVExporter, MarkdownExporter
 from mediagarden.models import AnyFile
 from mediagarden.scanner import (
     LibraryStorage, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
