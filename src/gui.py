@@ -6,7 +6,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import GLib, Gio, Gtk, GObject, Gdk
 
 from window_builder import WindowBuilder
-from scanner import (
+from mediagarden.scanner import (
     LibraryStorage, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
 )

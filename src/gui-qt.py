@@ -11,7 +11,7 @@ django.setup()
 
 from common.gui_main_window import MainWindow
 from mediagarden.gui_entity_windows import GUIAnyFile
-from scanner import (
+from mediagarden.scanner import (
     STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
 )

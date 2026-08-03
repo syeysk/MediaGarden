@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, QModelIndex, pyqtSignal, QMimeData, QThread, pyqtSl
 
 from exporters import CSVExporter, MarkdownExporter
 from mediagarden.models import AnyFile
-from scanner import (
+from mediagarden.scanner import (
     LibraryStorage, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
 )

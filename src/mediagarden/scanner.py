@@ -3,7 +3,6 @@ import hashlib
 import os
 
 from django.conf import settings
-# from django.db.models import Q, Count
 
 from common.models import Tag
 from mediagarden.models import AnyFile
@@ -30,39 +29,8 @@ def get_file_hash(file_path):
     return hasher.hexdigest()
 
 
-class DBStorage:
-    COUNT_ROWS_FOR_INSERT = 30
-    COUNT_ROWS_ON_PAGE = 30
-
-    def get_count_pages(self, total_rows_count) -> int:
-        count_pages = total_rows_count // self.COUNT_ROWS_ON_PAGE
-        return count_pages + 1 if total_rows_count % self.COUNT_ROWS_ON_PAGE > 0 else count_pages
-
-    def select_count(self, tags=None, search=''):
-        return self._build_queryset(tags, search).count()
-
-    def select_row(self, index, tags=None, search=''):
-        queryset = self._build_queryset(tags, search).order_by('filename')
-        return queryset[index]
-
-    def select_rows(self, tags=None, search=''):
-        queryset = self._build_queryset(tags, search).order_by('filename')
-        count_pages = self.get_count_pages(queryset.count())
-        for page_num in range(count_pages):
-            offset = page_num * self.COUNT_ROWS_ON_PAGE
-            for anyfile in queryset[offset:offset + self.COUNT_ROWS_ON_PAGE]:
-                yield anyfile
-
-    def insert_file(self, file_hash, file_id, inserted_file):
-        AnyFile(hash=file_hash, pk=file_id, directory=os.path.dirname(inserted_file), filename=os.path.basename(inserted_file))
-
-
 class LibraryStorage:
     CSV_COUNT_ROWS_ON_PAGE = 100
-
-    def __init__(self) -> None:
-        """Инициализирует класс сканера хранилища"""
-        self.db = DBStorage()
 
     def scan_to_db(
             self,

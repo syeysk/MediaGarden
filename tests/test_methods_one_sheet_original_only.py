@@ -4,7 +4,7 @@ import copy
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 from src.exporters import CSVExporter
-from src.scanner import DBStorage, LibraryStorage
+from mediagarden.scanner import DBStorage, LibraryStorage
 
 ORIGIN_FS = (
     ('/origin/file01.txt', 'content01'),

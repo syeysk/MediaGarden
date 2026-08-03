@@ -3,7 +3,7 @@ from unittest.mock import patch
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 from src.exporters import CSVExporter
-from src.scanner import DBStorage, LibraryStorage, STATUS_DUPLICATE
+from mediagarden.scanner import DBStorage, LibraryStorage, STATUS_DUPLICATE
 from tests.library_storage_fabric import LibraryStorageFabric
 
 ORIGIN_DIFF_CSV = (
@@ -47,7 +47,7 @@ class CoreTestCase(TestCase):
     def func(self, status, existed_path, inserted_path, file_hash):
         self.results.append((status, existed_path, inserted_path))
 
-    @patch('src.scanner.get_file_hash', mock_get_file_hash)
+    @patch('mediagarden.scanner.get_file_hash', mock_get_file_hash)
     def test_duplicate_in_origin(self):
         origin_fs = (
             ('/file01.txt', 'content01'),
