@@ -1,8 +1,8 @@
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QSplitter, QHBoxLayout, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel
+    QApplication, QMainWindow, QSplitter, QHBoxLayout, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QTabWidget
 )
+from PyQt6.QtCore import Qt
 
-# from common.gui_entities_list import EntitiesList
 from common.gui_entity_types import EntityTypesWidget
 from common.gui_tags import TagsWidget
 
@@ -21,26 +21,26 @@ class MainWindow(QMainWindow):
 
         # Левая панель
 
-        left_panel = QWidget()
-        left_panel.setFixedWidth(300)
-        self.central_widget.addWidget(left_panel)
-
-        left_layout = QVBoxLayout()
+        tab = QTabWidget()
+        tab.setMovable(True)
+        tab.setTabPosition(QTabWidget.TabPosition.West)
+        self.central_widget.addWidget(tab)
 
         entity_types = EntityTypesWidget(self.gui_models)
         entity_types.selected_entity_type.connect(self.change_table)
-        left_layout.addWidget(entity_types)
 
         self.actions_holder = QVBoxLayout()
-        left_layout.addLayout(self.actions_holder)
-
-        left_layout.addSpacing(15)
+        self.actions_holder.setContentsMargins(0, 0, 0, 0)
+        self.actions_holder.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.tags_widget = TagsWidget()
         self.tags_widget.tag_status_changed.connect(self.update_table)
-        left_layout.addWidget(self.tags_widget)
 
-        left_panel.setLayout(left_layout)
+        actions_widget = QWidget()
+        actions_widget.setLayout(self.actions_holder)
+        tab.addTab(entity_types, 'Types')
+        tab.addTab(actions_widget, 'Actions')
+        tab.addTab(self.tags_widget, 'Tags')
 
         # Правая панель
 
@@ -78,9 +78,6 @@ class MainWindow(QMainWindow):
 
     def update_tags(self):
         self.tags_widget.build_tags(self.current_gui_model.dj_model)
-
-    def update_table(self):
-        pass
 
     def update_actions(self):
         if self.actions_widget:

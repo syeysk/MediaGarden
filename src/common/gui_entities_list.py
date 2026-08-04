@@ -70,6 +70,7 @@ class EntitiesList(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.table = QTableView()
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

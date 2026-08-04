@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 
 __all__ = ['EntityTypesWidget']
 
@@ -11,12 +11,12 @@ class EntityTypesWidget(QWidget):
         super().__init__(parent)
         self.dj_model = None
         layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.dict_gui_button = {}
         self.current_gui_model = gui_models[0] if gui_models else None
 
         for gui_model in gui_models:
             btn = QPushButton(gui_model.dj_model._meta.verbose_name)
-            btn.setFixedWidth(120)
             btn.clicked.connect(self.get_select_function(gui_model))
             layout.addWidget(btn)
             self.dict_gui_button[gui_model] = btn
