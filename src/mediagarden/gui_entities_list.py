@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPalette
 
-from common.gui_tags import TaggedWidget
+from gardensunion.base.gui_tags import TaggedWidget
 from utils import open_file_with_default_program
 
 

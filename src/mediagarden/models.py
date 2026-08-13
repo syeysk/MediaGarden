@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from common.models import Tag
+from gardensunion.base.models import Tag
 
 
 MEDIAGROUP_DOCUMENT = 1

@@ -2,19 +2,16 @@ import os
 import sys
 
 import django
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QDialog
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QModelIndex, QAbstractListModel
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings')
 django.setup()
 
-from common.gui_main_window import MainWindow
+from gardensunion.base.gui_main_window import MainWindow
 from mediagarden.gui_entity_windows import GUIAnyFile
-from mediagarden.scanner import (
-    STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
-    STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
-)
+from mediagarden.scanner import STATUS_NEW, STATUS_DELETED
 
 from django.conf import settings
 

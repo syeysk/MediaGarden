@@ -4,7 +4,7 @@ import os
 
 from django.conf import settings
 
-from common.models import Tag
+from gardensunion.base.models import Tag
 from mediagarden.models import AnyFile
 
 STATUS_NEW = 'Новый'

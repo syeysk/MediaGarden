@@ -23,6 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_REPO_DIR = BASE_DIR.parent
 EXAMPLE_CONFIG_PATH = BASE_REPO_DIR / 'config.example.json'
 CONFIG_PATH = BASE_REPO_DIR / 'config.json'
+CHARSET = 'utf-8'
 
 if not CONFIG_PATH.exists():
     if (hasattr(EXAMPLE_CONFIG_PATH, 'copy')):
@@ -57,7 +58,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'common',
+    'gardensunion.base',
     'mediagarden',
 ]
 

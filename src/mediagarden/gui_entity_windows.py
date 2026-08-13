@@ -4,7 +4,7 @@ from PyQt6.QtCore import pyqtSignal
 from utils import open_file_with_default_program
 
 from mediagarden.gui_entities_list import FilesList
-from common.gui_entity import GUIEntity
+from gardensunion.base.gui_entity import GUIEntity
 from mediagarden.gui_actions import ActionsAnyFileWidget
 from mediagarden.models import AnyFile
 

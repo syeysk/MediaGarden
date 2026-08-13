@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('common', '0001_initial'),
+        ('base', '0001_initial'),
     ]
 
     operations = [
@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('is_deleted', models.BooleanField(default=False, verbose_name='Удалён ли')),
                 ('mediagroup', models.IntegerField(choices=[(1, 'Документ'), (2, 'Картинка'), (3, 'Аудио')], default=1, verbose_name='Тип файла')),
                 ('isarchive', models.BooleanField(default=False, verbose_name='Флаг архива')),
-                ('tags', models.ManyToManyField(related_name='files', to='common.tag')),
+                ('tags', models.ManyToManyField(related_name='files', to='base.tag')),
             ],
         ),
     ]
