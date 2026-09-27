@@ -49,7 +49,7 @@ class AnyFile(models.Model):
         self.filename = inserted_filename
         self.save()
 
-    class Model:
+    class Meta:
         verbose_name = 'Файл'
         verbose_name_plural = 'Файлы'
 

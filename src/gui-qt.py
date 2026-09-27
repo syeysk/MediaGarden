@@ -18,7 +18,7 @@ from django.conf import settings
 ScanCardTypeRole = Qt.ItemDataRole.UserRole + 1
 
 
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt, QAbstractListModel, QModelIndex
 
 
