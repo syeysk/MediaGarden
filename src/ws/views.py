@@ -18,7 +18,7 @@ type_components = {
     STATUS_MOVED_AND_RENAMED: 'moved',
     STATUS_UNTOUCHED: 'untouched',
     STATUS_DELETED: 'deleted',
-    STATUS_DUPLICATE: 'duplicated',
+    STATUS_DUPLICATE: 'dublicated',
 }
 
 
@@ -34,17 +34,16 @@ class Manager:
 
     def send_card(self, status, inserted_anyfile, existed_anyfile):
         if status != STATUS_UNTOUCHED:
-            if status in {STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED}:
-                existed_anyfile.update_path(inserted_anyfile.directory, inserted_anyfile.filename)
-
             self.send_to_me(
                 type='card',
                 status=type_components[status],
-                inserted_path=inserted_anyfile.relpath,
-                existed_path=existed_anyfile.relpath,
+                inserted_path=str(inserted_anyfile.relpath) if inserted_anyfile else None,
+                existed_path=str(existed_anyfile.relpath) if existed_anyfile else None,
                 inserted_id=inserted_anyfile.id if inserted_anyfile else None,
                 existed_id=existed_anyfile.id if existed_anyfile else None,
             )
+            if status in {STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED}:
+                existed_anyfile.update_path(inserted_anyfile.directory, inserted_anyfile.filename)
 
     def count_scanned_files(self, count):
         self.send_to_me(type='count', count_scanned_files=count)

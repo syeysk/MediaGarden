@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'server',
     'gardensunion.base',
     'mediagarden',
+    'ws',
 ]
 
 MIDDLEWARE = [

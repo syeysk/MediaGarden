@@ -59,8 +59,10 @@ MediaGarden допускает, что Вы можете переименова�
 
 # Запуск
 
-Для запуска MediaGarden перейдите в директорию репозиотрия и выполните:
-- `python src/gui.py`
+Для запуска MediaGarden перейдите в директорию репозитория и выполните:
+- `cd src`
+- `python -X utf8 manage.py runserver`
+- `python -X utf8 manage.py runwsserver`
 
 ## Контакты
 

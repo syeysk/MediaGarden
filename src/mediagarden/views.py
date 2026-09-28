@@ -42,7 +42,12 @@ class ActionScanView(APIView):
         card = request.data['card']
         what_do = request.data['what_do']
         card_status = card['status']
-        inserted_anyfile = AnyFile.objects.filter(pk=card['inserted_id']).first() if card['inserted_id'] else None
+        inserted_path = Path(card['inserted_path'])
+        inserted_anyfile = (
+            AnyFile.objects.filter(pk=card['inserted_id']).first()
+            if card['inserted_id']
+            else AnyFile(directory=str(inserted_path.parent), filename=inserted_path.name)
+        )
         existed_anyfile = AnyFile.objects.filter(pk=card['existed_id']).first() if card['existed_id'] else None
         if card_status == 'new' and what_do == 'delete':
             inserted_anyfile.abspath.unlink()
