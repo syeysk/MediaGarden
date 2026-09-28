@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
@@ -31,5 +33,32 @@ class OpenView(APIView):
             open_file_with_default_program(any_file.absdirpath)
         elif what == 'file':
             open_file_with_default_program(any_file.abspath)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ActionScanView(APIView):
+    def post(self, request):
+        card = request.data['card']
+        what_do = request.data['what_do']
+        card_status = card['status']
+        inserted_anyfile = AnyFile.objects.filter(pk=card['inserted_id']).first() if card['inserted_id'] else None
+        existed_anyfile = AnyFile.objects.filter(pk=card['existed_id']).first() if card['existed_id'] else None
+        if card_status == 'new' and what_do == 'delete':
+            inserted_anyfile.abspath.unlink()
+            inserted_anyfile.delete()
+        # elif card_status == 'moved' and what_do == 'cancel':
+        #     pass
+        # elif card_status == 'moved' and what_do == 'accept':
+        #     pass
+        elif card_status == 'dublicated' and what_do == 'delete_inserted':
+            inserted_anyfile.abspath.unlink()
+        elif card_status == 'dublicated' and what_do == 'delete_existed':
+            existed_anyfile.abspath.unlink()
+            existed_anyfile.update_path(inserted_anyfile.directory, inserted_anyfile.filename)
+        elif card_status == 'deleted' and what_do == 'delete':
+            existed_anyfile.delete()
+        else:
+            return Response(status=status.HTTP_403_BAD_REQUEST)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
