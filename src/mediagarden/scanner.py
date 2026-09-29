@@ -129,7 +129,7 @@ def import_csv_to_db(progress_count_imported_files):
 
     with open(settings.STORAGE_NOTES / 'tags.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
         for csv_row in csv.reader(csv_file):
-            Tag.objects.create(pk=csv_row[0], name=csv_row[1], parent_id=csv_row[2], code=csv_row[3])
+            Tag.objects.create(pk=csv_row[0], code=csv_row[1], name=csv_row[2], parent_id=csv_row[3])
 
     with open(settings.STORAGE_NOTES / 'tags-files.csv', 'r', encoding='utf-8', newline='\n') as csv_file:
         for csv_row in csv.reader(csv_file):

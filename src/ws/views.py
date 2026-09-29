@@ -6,10 +6,13 @@ from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
 from mediagarden.scanner import (
     scan_to_db, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
-    STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE,
+    STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE, export_db, import_csv_to_db
 )
+from mediagarden.exporters import MarkdownExporter, CSVExporter
 
 ascan_to_db = sync_to_async(scan_to_db)
+aexport_db = sync_to_async(export_db)
+aimport_csv_to_db = sync_to_async(import_csv_to_db)
 
 type_components = {
     STATUS_NEW: 'new',
@@ -32,6 +35,8 @@ class Manager:
     def send_to_me(self, **body):
         self.send([self.connection], **body)
 
+
+class ManagerScan(Manager):
     def send_card(self, status, inserted_anyfile, existed_anyfile):
         if status != STATUS_UNTOUCHED:
             self.send_to_me(
@@ -51,11 +56,19 @@ class Manager:
     def progress_current_file(self, filepath):
         self.send_to_me(type='filepath', progress_current_file=filepath)
 
-task = None
+
+class ManagerExport(Manager):
+    def progress(self, index_of_current_row, count_rows, csv_current_page):
+        self.send_to_me(type='count', index_row=index_of_current_row, count_rows=count_rows, index_page=csv_current_page)
+
+
+class ManagerImport(Manager):
+    def progress(self, index_of_current_row):
+        self.send_to_me(type='count', index_row=index_of_current_row)
+
 
 async def scan_view(conection):
-    global task
-    manager = Manager(conection)
+    manager = ManagerScan(conection)
     while True:
         try:
             data_str = await conection.recv()
@@ -68,6 +81,50 @@ async def scan_view(conection):
                         manager.progress_current_file,
                         manager.send_card,
                     )
+        except ConnectionClosedOK as _:
+            break
+        except ConnectionClosedError as _:
+            break
+        except Exception as error:
+            raise error
+
+
+async def export_view(conection):
+    manager = ManagerExport(conection)
+    while True:
+        try:
+            data_str = await conection.recv()
+            if data_str:
+                data_json = json.loads(data_str)
+                command = data_json.get('command')
+                format = data_json.get('format')
+                if command == 'export':
+                    exporter_class = None
+                    if format == 'markdown':
+                        exporter_class = MarkdownExporter
+                    elif format == 'csv':
+                        exporter_class = CSVExporter
+
+                    await aexport_db(exporter_class, manager.progress)
+        except ConnectionClosedOK as _:
+            break
+        except ConnectionClosedError as _:
+            break
+        except Exception as error:
+            raise error
+
+
+
+async def import_view(conection):
+    manager = ManagerImport(conection)
+    while True:
+        try:
+            data_str = await conection.recv()
+            if data_str:
+                data_json = json.loads(data_str)
+                command = data_json.get('command')
+                if command == 'import':
+                    await aimport_csv_to_db(manager.progress)
         except ConnectionClosedOK as _:
             break
         except ConnectionClosedError as _:
