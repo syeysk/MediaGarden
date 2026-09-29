@@ -8,6 +8,8 @@ env = environ.Env(
     DEBUG=(bool, True),
     ALLOWED_HOSTS=(list, ['*']),
     SITE_URL=(str, 'http://127.0.0.1'),
+    MODULES=(list, []),
+    ENTITY_TYPES=(list, []),
 )
 environ.Env.read_env(env_file=BASE_DIR / '.env')
 
@@ -22,13 +24,12 @@ SECRET_KEY = env('SECRET_KEY')
 SITE_URL = env('SITE_URL')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
-ENTITY_TYPES = [
-    'mediagarden.gui_models.GUIAnyFile',
-]
+ENTITY_TYPES = env('ENTITY_TYPES')
 ENTITY_MODELS_BY_CODE = {}
 
 # Application definition
 
+MODULES = env('MODULES')
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -40,9 +41,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'server',
     'gardensunion.base',
-    'mediagarden',
     'ws',
 ]
+INSTALLED_APPS.extend(MODULES)
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
