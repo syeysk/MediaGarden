@@ -15,6 +15,9 @@ environ.Env.read_env(env_file=BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 STORAGE_BOOKS = Path(env('STORAGE_BOOKS')).resolve()
+STORAGE_PICTURES = Path(env('STORAGE_PICTURES')).resolve()
+STORAGE_AUDIOS = Path(env('STORAGE_AUDIOS')).resolve()
+STORAGE_VIDEOS = Path(env('STORAGE_VIDEOS')).resolve()
 STORAGE_NOTES = Path(env('STORAGE_NOTES')).resolve()
 
 DEBUG = env('DEBUG')
