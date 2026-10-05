@@ -1,9 +1,11 @@
 import json
 
+from django.conf import settings
 from asgiref.sync import sync_to_async
 from websockets.asyncio.server import broadcast
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
+from gardensunion.base.utils import get_dj_model
 from mediagarden.scanner import (
     scan_to_db, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE, export_db, import_csv_to_db
@@ -67,7 +69,8 @@ class ManagerImport(Manager):
         self.send_to_me(type='count', index_row=index_of_current_row)
 
 
-async def scan_view(conection):
+async def scan_view(conection, type_entity_code):
+    gui_model = get_dj_model(int(type_entity_code))
     manager = ManagerScan(conection)
     while True:
         try:
@@ -77,6 +80,7 @@ async def scan_view(conection):
                 command = data_json.get('command')
                 if command == 'start':
                     await ascan_to_db(
+                        gui_model.dj_model,
                         manager.count_scanned_files,
                         manager.progress_current_file,
                         manager.send_card,
@@ -89,7 +93,8 @@ async def scan_view(conection):
             raise error
 
 
-async def export_view(conection):
+async def export_view(conection, type_entity_code):
+    gui_model = get_dj_model(int(type_entity_code))
     manager = ManagerExport(conection)
     while True:
         try:
@@ -105,7 +110,7 @@ async def export_view(conection):
                     elif format == 'csv':
                         exporter_class = CSVExporter
 
-                    await aexport_db(exporter_class, manager.progress)
+                    await aexport_db(gui_model.dj_model, exporter_class, manager.progress)
         except ConnectionClosedOK as _:
             break
         except ConnectionClosedError as _:
@@ -115,7 +120,8 @@ async def export_view(conection):
 
 
 
-async def import_view(conection):
+async def import_view(conection, type_entity_code):
+    gui_model = get_dj_model(int(type_entity_code))
     manager = ManagerImport(conection)
     while True:
         try:
@@ -124,7 +130,7 @@ async def import_view(conection):
                 data_json = json.loads(data_str)
                 command = data_json.get('command')
                 if command == 'import':
-                    await aimport_csv_to_db(manager.progress)
+                    await aimport_csv_to_db(gui_model.dj_model, manager.progress)
         except ConnectionClosedOK as _:
             break
         except ConnectionClosedError as _:

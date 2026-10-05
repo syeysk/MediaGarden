@@ -4,13 +4,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 
-from mediagarden.models import AnyFile
+from gardensunion.base.utils import get_dj_model
+from mediagarden.models import DocumentFile
 from utils import open_file_with_default_program
 
 
-class NoteView(APIView):
-    def put(self, request, any_file_id):
-        any_file = AnyFile.objects.filter(pk=any_file_id).first()
+class DocumentNoteView(APIView):
+    def put(self, request, type_entity_code, any_file_id):
+        gui_model = get_dj_model(int(type_entity_code))
+        model_class = gui_model.dj_model
+
+        any_file = model_class.objects.filter(pk=any_file_id).first()
         if not any_file:
             return Response(status=status.HTTP_400_BAD_REQUEST, data={'message': 'file not found'})
 
@@ -21,9 +25,12 @@ class NoteView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class OpenView(APIView):
-    def post(self, request, any_file_id):
-        any_file = AnyFile.objects.filter(pk=any_file_id).first()
+class DocumentOpenView(APIView):
+    def post(self, request, type_entity_code, any_file_id):
+        gui_model = get_dj_model(int(type_entity_code))
+        model_class = gui_model.dj_model
+
+        any_file = model_class.objects.filter(pk=any_file_id).first()
         if not any_file:
             return Response(status=status.HTTP_400_BAD_REQUEST, data={'message': 'file not found'})
 
@@ -38,17 +45,20 @@ class OpenView(APIView):
 
 
 class ActionScanView(APIView):
-    def post(self, request):
+    def post(self, request, type_entity_code):
+        gui_model = get_dj_model(int(type_entity_code))
+        model_class = gui_model.dj_model
+
         card = request.data['card']
         what_do = request.data['what_do']
         card_status = card['status']
         inserted_path = Path(card['inserted_path'])
         inserted_anyfile = (
-            AnyFile.objects.filter(pk=card['inserted_id']).first()
+            model_class.objects.filter(pk=card['inserted_id']).first()
             if card['inserted_id']
-            else AnyFile(directory=str(inserted_path.parent), filename=inserted_path.name)
+            else model_class(directory=str(inserted_path.parent), filename=inserted_path.name)
         )
-        existed_anyfile = AnyFile.objects.filter(pk=card['existed_id']).first() if card['existed_id'] else None
+        existed_anyfile = model_class.objects.filter(pk=card['existed_id']).first() if card['existed_id'] else None
         if card_status == 'new' and what_do == 'delete':
             inserted_anyfile.abspath.unlink()
             inserted_anyfile.delete()
