@@ -51,6 +51,7 @@ class GUIAudioFile():
         'scan': 'Сканирование',
         'export': 'Экспорт в заметки',
         'import': 'Импорт из заметок',
+        'playlist': 'Сохранить как плейлист',
     }
 
     def populate_extra_window_fields(entity: AudioFile, fields: dict):

@@ -5,16 +5,30 @@ from asgiref.sync import sync_to_async
 from websockets.asyncio.server import broadcast
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
-from gardensunion.base.utils import get_dj_model
+from gardensunion.base.models import Tag
+from gardensunion.base.utils import get_dj_model, get_related_name_for_tag
 from mediagarden.scanner import (
     scan_to_db, STATUS_NEW, STATUS_MOVED, STATUS_RENAMED, STATUS_MOVED_AND_RENAMED,
     STATUS_UNTOUCHED, STATUS_DELETED, STATUS_DUPLICATE, export_db, import_csv_to_db
 )
 from mediagarden.exporters import MarkdownExporter, CSVExporter
 
+def create_playlist(model, tag_ids, func_finish):
+    tag = Tag.objects.filter(pk=tag_ids[0]).first()
+    with open(model.STORAGE / f'{tag.name}.m3u8', 'wt', encoding='utf-8') as playlist_file:
+        related_name = get_related_name_for_tag(model)
+        for tag_id in tag_ids:
+            tag = Tag.objects.filter(pk=tag_id).first()
+            for any_file in getattr(tag, related_name).all():
+                playlist_file.write(any_file.relpath)
+                playlist_file.write('\n')
+
+    func_finish()
+
 ascan_to_db = sync_to_async(scan_to_db)
 aexport_db = sync_to_async(export_db)
 aimport_csv_to_db = sync_to_async(import_csv_to_db)
+acreate_playlist = sync_to_async(create_playlist)
 
 type_components = {
     STATUS_NEW: 'new',
@@ -67,6 +81,11 @@ class ManagerExport(Manager):
 class ManagerImport(Manager):
     def progress(self, index_of_current_row):
         self.send_to_me(type='count', index_row=index_of_current_row)
+
+
+class ManagerPlaylist(Manager):
+    def finish(self):
+        self.send_to_me(type='message', message='Плейлист создан')
 
 
 async def scan_view(conection, type_entity_code):
@@ -131,6 +150,25 @@ async def import_view(conection, type_entity_code):
                 command = data_json.get('command')
                 if command == 'import':
                     await aimport_csv_to_db(gui_model.dj_model, manager.progress)
+        except ConnectionClosedOK as _:
+            break
+        except ConnectionClosedError as _:
+            break
+        except Exception as error:
+            raise error
+
+
+async def playlist_view(conection, type_entity_code):
+    gui_model = get_dj_model(int(type_entity_code))
+    manager = ManagerPlaylist(conection)
+    while True:
+        try:
+            data_str = await conection.recv()
+            if data_str:
+                data_json = json.loads(data_str)
+                command = data_json.get('command')
+                if command == 'create':
+                    await acreate_playlist(gui_model.dj_model, data_json['tags'], manager.finish)
         except ConnectionClosedOK as _:
             break
         except ConnectionClosedError as _:

@@ -5,7 +5,6 @@ from rest_framework.views import APIView
 from rest_framework import status
 
 from gardensunion.base.utils import get_dj_model
-from mediagarden.models import DocumentFile
 from utils import open_file_with_default_program
 
 
