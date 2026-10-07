@@ -36,6 +36,7 @@ def scan_to_db(
         progress_count_scanned_files=None,
         progress_current_file=None,
         func=None,
+        func_finish=None,
 ):
     """Сканирует информацию о файлах в директории и заносит её в базу"""
     model_class.objects.update(is_deleted=True)
@@ -74,6 +75,9 @@ def scan_to_db(
     for existed_anyfile in model_class.objects.filter(is_deleted=True):
         if func:
             func(STATUS_DELETED, None, existed_anyfile)
+
+    if func_finish:
+        func_finish()
 
 
 def export_db(model_class, exporter_class, progress_count_exported_files=None) -> None:
@@ -118,7 +122,7 @@ def export_db(model_class, exporter_class, progress_count_exported_files=None) -
                 csv_writer.writerow((row[0], tag.pk))
 
 
-def import_csv_to_db(model_class, progress_count_imported_files):
+def import_csv_to_db(model_class, progress_count_imported_files, func_finish=None):
     index_of_current_row = 0
     for csv_filename in os.scandir(model_class.STORAGE_NOTES):
         if csv_filename.name in ('tags.csv', 'tags-files.csv'):
@@ -139,6 +143,9 @@ def import_csv_to_db(model_class, progress_count_imported_files):
             anyfile = model_class.objects.filter(pk=csv_row[0]).first()
             tag = Tag.objects.filter(pk=csv_row[1]).first()
             getattr(tag, related_name).add(anyfile)
+    
+    if func_finish:
+        func_finish()
 
 
 def get_file_status(inserted_anyfile, existed_anyfile):

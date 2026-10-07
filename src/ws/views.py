@@ -72,6 +72,9 @@ class ManagerScan(Manager):
     def progress_current_file(self, filepath):
         self.send_to_me(type='filepath', progress_current_file=filepath)
 
+    def finish(self):
+        self.send_to_me(type='message', message='Сканирование завершено')
+
 
 class ManagerExport(Manager):
     def progress(self, index_of_current_row, count_rows, csv_current_page):
@@ -79,6 +82,9 @@ class ManagerExport(Manager):
 
 
 class ManagerImport(Manager):
+    def finish(self):
+        self.send_to_me(type='message', message='Импорт завершён')
+
     def progress(self, index_of_current_row):
         self.send_to_me(type='count', index_row=index_of_current_row)
 
@@ -103,6 +109,7 @@ async def scan_view(conection, type_entity_code):
                         manager.count_scanned_files,
                         manager.progress_current_file,
                         manager.send_card,
+                        manager.finish,
                     )
         except ConnectionClosedOK as _:
             break
@@ -149,7 +156,7 @@ async def import_view(conection, type_entity_code):
                 data_json = json.loads(data_str)
                 command = data_json.get('command')
                 if command == 'import':
-                    await aimport_csv_to_db(gui_model.dj_model, manager.progress)
+                    await aimport_csv_to_db(gui_model.dj_model, manager.progress, manager.finish)
         except ConnectionClosedOK as _:
             break
         except ConnectionClosedError as _:

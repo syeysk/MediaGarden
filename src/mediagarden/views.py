@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from django.http import HttpResponse
+from django.views import View
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
@@ -76,3 +78,31 @@ class ActionScanView(APIView):
             return Response(status=status.HTTP_403_BAD_REQUEST)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+
+class PictureView(View):
+    def get(self, request, type_entity_code, any_file_id):
+        from PIL import Image
+        from io import BytesIO
+        is_preview = bool(request.GET.get('preview'))
+        gui_model = get_dj_model(int(type_entity_code))
+        model_class = gui_model.dj_model
+        image_dj = model_class.objects.filter(pk=any_file_id).first()
+
+        abspath = image_dj.abspath
+        image_bytes = b''
+        if abspath.stat().st_size < 1024*1024*2:
+            if is_preview:
+                image_obj = Image.open(abspath)
+                max_size = (300, 300)
+                image_obj.thumbnail(max_size)
+                img_io = BytesIO()
+                image_obj.save(img_io, format='PNG')
+                image_bytes = img_io.getvalue()
+            else:
+                with abspath.open('rb') as image_file:
+                    image_bytes = image_file.read()
+
+
+        return HttpResponse(image_bytes, content_type='image/jpeg')
