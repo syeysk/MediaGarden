@@ -104,5 +104,4 @@ class PictureView(View):
                 with abspath.open('rb') as image_file:
                     image_bytes = image_file.read()
 
-
         return HttpResponse(image_bytes, content_type='image/jpeg')

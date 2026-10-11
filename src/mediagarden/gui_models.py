@@ -6,7 +6,7 @@ class GUIDocumentFile:
     window_name = 'any_file'
     window_fields = ['filename', 'directory', 'hash']
     table_fields = ['filename', 'directory']
-    table_name = 'any_file'
+    table_name = 'AnyFileCard'
     field_order = 'filename'
     fields_search = ['directory', 'filename']
     actions = {
@@ -25,7 +25,7 @@ class GUIPictureFile():
     window_name = 'any_file'
     window_fields = ['filename', 'directory', 'hash']
     table_fields = ['filename', 'directory']
-    table_name = 'any_file'
+    table_name = 'PictureCard'
     field_order = 'filename'
     fields_search = ['directory', 'filename']
     actions = {
@@ -44,7 +44,7 @@ class GUIAudioFile():
     window_name = 'any_file'
     window_fields = ['filename', 'directory', 'hash']
     table_fields = ['filename', 'directory']
-    table_name = 'any_file'
+    table_name = 'AnyFileCard'
     field_order = 'filename'
     fields_search = ['directory', 'filename']
     actions = {
@@ -64,7 +64,7 @@ class GUIVideoFile():
     window_name = 'any_file'
     window_fields = ['filename', 'directory', 'hash']
     table_fields = ['filename', 'directory']
-    table_name = 'any_file'
+    table_name = 'AnyFileCard'
     field_order = 'filename'
     fields_search = ['directory', 'filename']
     actions = {
