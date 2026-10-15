@@ -10,22 +10,18 @@ env = environ.Env(
     SITE_URL=(str, 'http://127.0.0.1'),
 )
 environ.Env.read_env(env_file=BASE_DIR / '.env')
+ENV = env
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 STORAGE_BOOKS = Path(env('STORAGE_BOOKS')).resolve()
-STORAGE_PICTURES = Path(env('STORAGE_PICTURES')).resolve()
-STORAGE_AUDIOS = Path(env('STORAGE_AUDIOS')).resolve()
-STORAGE_VIDEOS = Path(env('STORAGE_VIDEOS')).resolve()
-STORAGE_NOTES = Path(env('STORAGE_NOTES')).resolve()
 
 DEBUG = env('DEBUG')
 SECRET_KEY = env('SECRET_KEY')
 SITE_URL = env('SITE_URL')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
-ENTITY_TYPES = env.list('ENTITY_TYPES', default=[])
 ENTITY_MODELS_BY_CODE = {}
 
 # Application definition
