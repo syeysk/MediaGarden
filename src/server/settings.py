@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'server',
     'gardensunion.base',
+    'gardensunion.link',
     'ws',
 ]
 INSTALLED_APPS.extend(MODULES)
