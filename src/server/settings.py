@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     'server',
     'gardensunion.base',
     'gardensunion.link',
-    'ws',
 ]
 INSTALLED_APPS.extend(MODULES)
 

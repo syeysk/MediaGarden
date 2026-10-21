@@ -5,3 +5,4 @@ config.json
 .pytest_cache
 .debug.log
 .env
+*.egg-info

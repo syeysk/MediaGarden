@@ -4,14 +4,14 @@ import re
 from django.core.management.base import BaseCommand
 from websockets.asyncio.server import ServerConnection, serve
 
-from ws.urls import url_patterns
+from mediagarden.ws_urls import urlpatterns
 
 
 # TODO: использовать джанговый распознаватель путей
 # TODO: вынести в отдельную библиотеку
 async def handler(websocket: ServerConnection):
     print('path is', websocket.request.path)
-    for url in url_patterns:
+    for url in urlpatterns:
         if len(url) == 2:
             url.append(re.compile(url[0]))
 
