@@ -54,6 +54,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'server.urls'
+ROOT_WSURLCONF = 'server.ws_urls'
 
 TEMPLATES = [
     {
