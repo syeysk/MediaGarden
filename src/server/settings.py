@@ -15,8 +15,6 @@ ENV = env
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-STORAGE_BOOKS = Path(env('STORAGE_BOOKS')).resolve()
-
 DEBUG = env('DEBUG')
 SECRET_KEY = env('SECRET_KEY')
 SITE_URL = env('SITE_URL')
@@ -80,7 +78,7 @@ WSGI_APPLICATION = 'server.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': STORAGE_BOOKS / 'sqlite3.db',
+        'NAME': BASE_DIR / 'sqlite3.db',
     }
 }
 
